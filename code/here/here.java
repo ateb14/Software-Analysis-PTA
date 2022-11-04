@@ -9,7 +9,7 @@ public class here {
             a = b;
         }
         int x = 10;
-        int y = inc(x) + dec(x);
+        int y = inc(x) + dec(x) + inc(3 * x);
         System.out.println(y);
     }
 

@@ -136,3 +136,8 @@
 - description: find the method that may drop or ignore exceptions
   analysisClass: pascal.taie.analysis.bugfinder.DroppedException
   id: dropped-exception
+
+- description: My first Analysis
+  analysisClass: MyAnalysis.MyFirstAnalysis
+  id: MyFirstTest
+#  requires: [ cfg ]

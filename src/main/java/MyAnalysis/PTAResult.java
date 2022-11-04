@@ -1,2 +1,4 @@
-package MyAnalysis;public class PTAResult {
+package MyAnalysis;
+
+public class PTAResult {
 }

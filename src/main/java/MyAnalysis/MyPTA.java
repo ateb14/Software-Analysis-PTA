@@ -6,14 +6,14 @@ import pascal.taie.ir.stmt.Stmt;
 
 import java.util.Set;
 
-public class MyPTA extends ProgramAnalysis<> {
+public class MyPTA extends ProgramAnalysis<PTAResult> {
 
     public MyPTA(AnalysisConfig config) {
         super(config);
     }
 
     @Override
-    public Object analyze() {
+    public PTAResult analyze() {
         return null;
     }
 }

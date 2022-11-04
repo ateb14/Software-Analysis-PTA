@@ -7,13 +7,15 @@ import pascal.taie.config.AnalysisConfig;
 import pascal.taie.ir.IR;
 import pascal.taie.ir.exp.Literal;
 import pascal.taie.ir.exp.Var;
-import pascal.taie.ir.stmt.Stmt;
+import pascal.taie.ir.proginfo.MethodRef;
+import pascal.taie.ir.stmt.*;
 import pascal.taie.language.classes.ClassHierarchy;
 import pascal.taie.language.classes.JClass;
 import pascal.taie.language.classes.JMethod;
 import pascal.taie.util.AnalysisException;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -46,11 +48,36 @@ public class MyFirstAnalysis extends ProgramAnalysis<Set<Stmt>> {
         System.out.println("Here is the signature of the main method:");
         System.out.println(main_method.getSubsignature().toString());
 
-        ClassHierarchy class_hierarchy = world.getClassHierarchy();
-        Stream<JClass> classes = class_hierarchy.allClasses();
-        for(JClass class_ : classes){
+
+        System.out.println("Now we're going through the statements of the main method:");
+        IR main_ir = main_method.getIR();
+
+        for(Stmt statement : main_ir.getStmts()){
+
+            // call statements
+            // System.out.println(statement);
+            if(statement instanceof Invoke invoke) {
+                MethodRef m_ref = invoke.getMethodRef();
+                System.out.println("Invoke:\n    " + m_ref.toString());
+                if (invoke.getLValue() != null) {
+                    System.out.println("    Lvalue name:" + invoke.getLValue().getName());
+                }
+                System.out.println("    Args:");
+                for(Var arg : invoke.getInvokeExp().getArgs()){
+                    System.out.println("        " + arg.getType() + " " + arg.getName());
+                }
+            } else if (statement instanceof New new_stmt) {
+                System.out.println("New:\n    " + new_stmt);
+            } else if (statement instanceof AssignLiteral asl_stmt) {
+                System.out.println("Assign Literal:\n    " + asl_stmt);
+                System.out.println("    L:" + asl_stmt.getLValue());
+                System.out.println("    R:" + asl_stmt.getRValue());
+            } else if (statement instanceof Binary b_stmt) {
+                System.out.println("Assign Binary:\n    " + b_stmt);
+            }
         }
 
+        System.out.println("###############\n");
         return null;
     }
 }
