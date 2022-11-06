@@ -1,3 +1,7 @@
+## Before we start...
+This is a course project aiming at constructing a pointer-analysis program based on some framework, and we choose Tai-e. Our codes locate in src/main/java/MyAnalysis.
+Here is the introduction by Tai-e's team, we show our gratitudes to them for building this easy-to-learn and easy-to-use framework!
+
 <div align="center">
   <img src="tai-e-logo.png" height="200">
 
