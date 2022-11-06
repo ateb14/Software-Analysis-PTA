@@ -6,12 +6,12 @@ import benchmark.objects.B;
 
 /*
  * @testcase FieldSensitivity2
- * 
+ *
  * @version 1.0
- * 
+ *
  * @author Johannes Späth, Nguyen Quang Do Lisa (Secure Software Engineering Group, Fraunhofer
  * Institute SIT)
- * 
+ *
  * @description Field Sensitivity without static method
  */
 public class FieldSensitivity {
@@ -22,7 +22,7 @@ public class FieldSensitivity {
     y.f = x.f;
   }
 
-  private void test() {	  
+  private void test() {
     Benchmark.alloc(1);
     B b = new B();
     Benchmark.alloc(2);

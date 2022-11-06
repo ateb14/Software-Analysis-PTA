@@ -7,6 +7,9 @@ import pascal.taie.ir.exp.Var;
 import pascal.taie.ir.stmt.*;
 import pascal.taie.language.classes.JMethod;
 
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.*;
 
 class NewConstraint {
@@ -88,12 +91,23 @@ public class Anderson {
         StringBuilder answer = new StringBuilder();
         for(Map.Entry<Integer, String> query : queries.entrySet()){
             answer.append(query.getKey()).append(":");
+            if(!pts.containsKey(query.getValue())){
+                answer.append("\n");
+                continue;
+            }
             for(Integer object : pts.get(query.getValue())){
                 answer.append(" ").append(object);
             }
             answer.append("\n");
         }
         System.out.print(answer);
+        try {
+            BufferedWriter out = new BufferedWriter(new FileWriter("result.txt"));
+            out.write(answer.toString());
+            out.close();
+        } catch (IOException e) {
+            System.out.print(answer);
+        }
     }
 
     /**
@@ -212,6 +226,21 @@ public class Anderson {
                     continue;
                 }
 
+                if(invoke_stmt.getLValue() != null){
+                    /** @// TODO: 2022/11/6 deal with the return value  */
+
+                }
+                List<Var> args= invoke_stmt.getInvokeExp().getArgs();
+                int arg_cnt = 0;
+                for(Var arg : args){
+                    AddEdge(
+                            GenMySignature(arg, cur_clone_depth),
+                            FetchFormalArgSignature(arg_cnt, invoke_stmt)
+                    );
+                    ++ arg_cnt;
+                }
+
+
                 // Recursively construct...
                 // it may throw an exception if the resolving process fails
                 InitConstraints(invoke_stmt.getInvokeExp().getMethodRef().resolve());
@@ -324,18 +353,40 @@ public class Anderson {
      * @param depth The clone-depth of the method of the given expression
      * @return The generated signature
      */
-    public String GenMySignature(Exp exp, int depth){
+    private String GenMySignature(Exp exp, int depth){
         String sig;
         if (exp instanceof Var var){
             //System.out.println("var");
             sig = depth + var.getMethod().getSignature() + var.getName();
         } else if (exp instanceof FieldAccess fa_exp){
             //System.out.println("field");
-            sig = depth + fa_exp.getFieldRef().resolve().getSignature();
+            /**@// TODO: 2022/11/7 We use filed-based analysis for now, needed to get improved  */
+            sig = fa_exp.getFieldRef().resolve().getSignature();
+            //sig = depth + "." + fa_exp;
         } else {
             sig = null;
         }
         //System.out.println(sig);
         return sig;
+    }
+
+    /**
+     * Get the signature of a formal argument of a method
+     * @param arg_cnt the number of the formal argument
+     * @param invoke the invoke statement
+     * @return the signature
+     */
+    private String FetchFormalArgSignature(int arg_cnt, Invoke invoke){
+        int depth;
+        String method_sig = invoke.getMethodRef().resolve().getSignature();
+        if(!method_counter_map.containsKey(method_sig)){ // not cloned yet
+            depth = 1;
+        } else if(method_counter_map.get(method_sig) < clone_depth){
+            depth = clone_depth + 1;
+        } else {
+            depth = clone_depth;
+        }
+        return depth + invoke.getInvokeExp().getMethodRef().resolve().getSignature() +
+                invoke.getInvokeExp().getMethodRef().resolve().getParamName(arg_cnt);
     }
 }
