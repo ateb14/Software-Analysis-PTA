@@ -141,3 +141,7 @@
   analysisClass: MyAnalysis.MyFirstAnalysis
   id: MyFirstTest
 #  requires: [ cfg ]
+
+- description: My PTA
+  analysisClass: MyAnalysis.MyPTA
+  id: my_pta

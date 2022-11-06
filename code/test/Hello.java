@@ -17,6 +17,5 @@ public class Hello {
     Benchmark.test(1, a);
     Benchmark.test(2, b);
     Benchmark.test(3, c);
-    System.out.println("Hello");
   }
 }

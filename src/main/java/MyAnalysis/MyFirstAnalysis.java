@@ -74,6 +74,14 @@ public class MyFirstAnalysis extends ProgramAnalysis<Set<Stmt>> {
                 System.out.println("    R:" + asl_stmt.getRValue());
             } else if (statement instanceof Binary b_stmt) {
                 System.out.println("Assign Binary:\n    " + b_stmt);
+            } else if (statement instanceof StoreField sf_stmt){
+                System.out.println("Store field:\n    " + sf_stmt);
+                System.out.println("    L:" + sf_stmt.getLValue().toString());
+                System.out.println("    R:" + sf_stmt.getRValue().toString());
+            } else if (statement instanceof LoadField lf_stmt){
+                System.out.println("Load field:\n    " + lf_stmt);
+                System.out.println("    L:" + lf_stmt.getLValue().toString());
+                System.out.println("    R:" + lf_stmt.getRValue().toString());
             }
         }
 
