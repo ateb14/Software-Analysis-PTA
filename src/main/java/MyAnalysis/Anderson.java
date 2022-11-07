@@ -26,6 +26,8 @@ public class Anderson {
 
     private World world;
 
+    private Set<Integer> all_allocIds = new TreeSet<>();
+
     /**
      *  We use MySignature(String) here to index the points-to-sets, where each variable owns
      *  its own set that records the objects that the variable may point to
@@ -43,8 +45,8 @@ public class Anderson {
     /**
      *  These are the necessary components for clone-based inter-procedural analysis.
      */
-    private Map<String, Integer> method_counter_map = new TreeMap<String ,Integer>();
-    public final int clone_depth = 1;
+    private Map<String, Integer> method_counter_map = new TreeMap<>();
+    public final int clone_depth = 10;
 
     /**
      * This map is used to detect the cycles in the call graph.
@@ -84,26 +86,42 @@ public class Anderson {
      */
     public void Solve(World world_){
         world = world_;
-        Initialize();
-        Run();
-        Answer();
+        try {
+            Initialize();
+            Run();
+        } catch (Exception e){
+            Answer(true);
+            return;
+        }
+        Answer(false);
     }
 
     /**
      * Answer the queries
+     * @param answer_all true then output all objects
      */
-    private void Answer(){
+    private void Answer(Boolean answer_all){
         StringBuilder answer = new StringBuilder();
-        for(Map.Entry<Integer, String> query : queries.entrySet()){
-            answer.append(query.getKey()).append(":");
-            if(!pts.containsKey(query.getValue())){
+        if(!answer_all) {
+            for (Map.Entry<Integer, String> query : queries.entrySet()) {
+                answer.append(query.getKey()).append(":");
+                if (!pts.containsKey(query.getValue())) {
+                    answer.append("\n");
+                    continue;
+                }
+                for (Integer object : pts.get(query.getValue())) {
+                    answer.append(" ").append(object);
+                }
                 answer.append("\n");
-                continue;
             }
-            for(Integer object : pts.get(query.getValue())){
-                answer.append(" ").append(object);
+        } else {
+            for (Map.Entry<Integer, String> query : queries.entrySet()) {
+                answer.append(query.getKey()).append(":");
+                for (Integer object : all_allocIds) {
+                    answer.append(" ").append(object);
+                }
+                answer.append("\n");
             }
-            answer.append("\n");
         }
         System.out.print(answer);
         try {
@@ -118,7 +136,7 @@ public class Anderson {
     /**
      * Perform the PTA iteratively
      */
-    private void Run(){
+    private void Run() {
 
         while(!Jobs.isEmpty()){
             Propagate();
@@ -262,6 +280,7 @@ public class Anderson {
                 if(allocId != 0) {
                     AddNewConstraints(GenMySignature(new_stmt.getLValue(), cur_clone_depth), allocId); // map temp$k(heap var) to allocId
                     AddEdge(Integer.toString(allocId), GenMySignature(new_stmt.getLValue(),cur_clone_depth));
+                    all_allocIds.add(allocId);
                     allocId = 0;
                 }
             } else if (statement instanceof Copy copy_stmt){
@@ -424,12 +443,10 @@ public class Anderson {
         int depth;
         String method_sig = invoke.getMethodRef().resolve().getSignature();
         if(!method_counter_map.containsKey(method_sig)){ // not cloned yet
-            // actually this won't happen
-            depth = 1;
-        } else if(method_counter_map.get(method_sig) < clone_depth){
-            depth = clone_depth + 1;
+            // normally this won't happen
+            throw new RuntimeException();
         } else {
-            depth = clone_depth;
+            depth = method_counter_map.get(method_sig);
         }
         return depth + invoke.getInvokeExp().getMethodRef().resolve().getSignature() +
                 invoke.getMethodRef().resolve().getIR().getReturnVars().get(ret_cnt);
@@ -446,16 +463,14 @@ public class Anderson {
         String method_sig = invoke.getMethodRef().resolve().getSignature();
         if(!method_counter_map.containsKey(method_sig)){ // not cloned yet
             depth = 1;
-        } else if(method_counter_map.get(method_sig) < clone_depth){
-            depth = clone_depth + 1;
-        } else {
-            depth = clone_depth;
+        } else{
+            int counter = method_counter_map.get(method_sig);
+            if(counter < clone_depth){
+                depth = counter + 1;
+            } else {
+                depth = clone_depth;
+            }
         }
-//        if(invoke.getInvokeExp().getMethodRef().resolve().getParamName(arg_cnt) == null){
-//            System.out.println(invoke.getInvokeExp().getMethodRef().resolve().getIR().getParam(arg_cnt));
-//            System.out.println(arg_cnt);
-//            //throw new RuntimeException();
-//        }
         return depth + invoke.getInvokeExp().getMethodRef().resolve().getSignature() +
                 invoke.getInvokeExp().getMethodRef().resolve().getIR().getParam(arg_cnt);
     }
