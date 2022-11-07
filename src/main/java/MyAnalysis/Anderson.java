@@ -41,10 +41,15 @@ public class Anderson {
     private Map<String, TreeSet<String> > graph = new HashMap<>();
 
     /**
-     *  These are the necessary components for clone-based inter-procedural analysis
+     *  These are the necessary components for clone-based inter-procedural analysis.
      */
     private Map<String, Integer> method_counter_map = new TreeMap<String ,Integer>();
     public final int clone_depth = 1;
+
+    /**
+     * This map is used to detect the cycles in the call graph.
+     */
+    private Map<String, Integer> single_path_visited_counter = new TreeMap<>();
 
 
     private void AddEdge(String from, String to){
@@ -193,6 +198,10 @@ public class Anderson {
             return;
         }
 
+        if(DetectCycle(method)){
+            return;
+        }
+
         /* Try to clone the methods */
         int cur_clone_depth = Clone(method);
 
@@ -238,10 +247,13 @@ public class Anderson {
 
                 // receive the return value
                 if(invoke_stmt.getLValue() != null){
-                    AddEdge(
-                            FetctReturnSignature(0, invoke_stmt),
-                            GenMySignature(invoke_stmt.getResult(), cur_clone_depth)
-                    );
+                    int ret_num = invoke_stmt.getInvokeExp().getMethodRef().resolve().getIR().getReturnVars().size();
+                    for(int i=0;i<ret_num;++i) {
+                        AddEdge(
+                                FetctReturnSignature(i, invoke_stmt),
+                                GenMySignature(invoke_stmt.getResult(), cur_clone_depth)
+                        );
+                    }
                 }
             } else if (statement instanceof New new_stmt) {
                 // New -> Var = NewExp; NewExp -> NewInstance | NewArray | NewMultiArray.
@@ -285,6 +297,7 @@ public class Anderson {
                 );
             }
         }
+        Traceback(method);
     }
 
     /**
@@ -321,7 +334,7 @@ public class Anderson {
      * @return the number of clones of the given method after this function finishes
      * @// TODO: 2022/11/6 For now this function is only a counter
      */
-    public int Clone(JMethod method){
+    private int Clone(JMethod method){
         String signature = method.getSignature();
         if (!method_counter_map.containsKey(signature)) {
             method_counter_map.put(signature, 1);
@@ -335,6 +348,34 @@ public class Anderson {
             return counter;
         }
 
+    }
+
+    /**
+     * Detect whether the DFS encounters a cycle.
+     * @param method The vertex in the call graph
+     * @return true if a cycle is detected, otherwise false
+     */
+    private boolean DetectCycle(JMethod method){
+        String signature = method.getSignature();
+        if(!single_path_visited_counter.containsKey(signature)){
+            single_path_visited_counter.put(signature, 1);
+            return false;
+        } else if(single_path_visited_counter.get(signature) == 0) {
+            single_path_visited_counter.put(signature, 1);
+            return false;
+        } else {
+            return true;
+        }
+    }
+
+    /**
+     * Perform the traceback in DFS
+     * @param method The given vertex in the call graph
+     */
+    private void Traceback(JMethod method){
+        String signature = method.getSignature();
+        Integer visited_num = single_path_visited_counter.get(signature);
+        single_path_visited_counter.put(signature, visited_num-1);
     }
 
     /**
@@ -373,6 +414,12 @@ public class Anderson {
         return sig;
     }
 
+    /**
+     * Generate a signature of the return value of the given invoke statement
+     * @param ret_cnt the number of the return value(always 0 ?)
+     * @param invoke the invoke statement
+     * @return the signature
+     */
     private String FetctReturnSignature(int ret_cnt, Invoke invoke){
         int depth;
         String method_sig = invoke.getMethodRef().resolve().getSignature();
@@ -389,7 +436,7 @@ public class Anderson {
     }
 
     /**
-     * Get the signature of a formal argument of a method
+     * Generate a signature of a formal argument of a method
      * @param arg_cnt the number of the formal argument
      * @param invoke the invoke statement
      * @return the signature
