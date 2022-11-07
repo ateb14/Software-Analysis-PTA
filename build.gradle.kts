@@ -29,7 +29,8 @@ task("fatJar", type = Jar::class) {
     group = "build"
     description = "Creates a single jar file including Tai-e and all dependencies"
     manifest {
-        attributes["Main-Class"] = "pascal.taie.Main"
+        // attributes["Main-Class"] = "pascal.taie.Main"
+        attributes["Main-Class"] = "MyAnalysis.Main"
     }
     archiveBaseName.set("tai-e-all")
     from(

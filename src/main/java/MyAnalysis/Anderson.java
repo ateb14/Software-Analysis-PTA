@@ -168,7 +168,7 @@ public class Anderson {
 //        for(AssignConstraint assignConstraint : assignConstraintList){
 //        System.out.println(assignConstraint.to + " " + assignConstraint.from);
 //        }
-        InitPTS();
+        //InitPTS();
 //        System.out.println("NewConstraints:");
 //        for(Map.Entry<String, TreeSet<Integer>> entry: pts.entrySet()){
 //            System.out.println(entry.getKey() + ":");
@@ -214,10 +214,14 @@ public class Anderson {
                 String signature = invoke_stmt.getMethodRef().toString();
 
                 // These statements may throw exceptions if the argument is not a constant, handle them?
-                if (signature.equals("<benchmark.internal.Benchmark: void alloc(int)>")){
+                if (signature.equals("<benchmark.internal.Benchmark: void alloc(int)>") ||
+                        signature.equals("<benchmark.internal.BenchmarkN: void alloc(int)>")
+                ){
                     allocId =  Integer.parseInt(invoke_stmt.getInvokeExp().getArg(0).getConstValue().toString());
                     continue;
-                } else if(signature.equals("<benchmark.internal.Benchmark: void test(int,java.lang.Object)>")){
+                } else if(signature.equals("<benchmark.internal.Benchmark: void test(int,java.lang.Object)>") ||
+                        signature.equals("<benchmark.internal.BenchmarkN: void test(int,java.lang.Object)>")
+                ){
                     List<Var> args = invoke_stmt.getInvokeExp().getArgs();
                     queries.put(
                                 Integer.parseInt(args.get(0).getConstValue().toString()), // allocId
@@ -250,6 +254,7 @@ public class Anderson {
                 // For Tai-e, the Var is always temp$k?
                 if(allocId != 0) {
                     AddNewConstraints(GenMySignature(new_stmt.getLValue(), cur_clone_depth), allocId); // map temp$k(heap var) to allocId
+                    AddEdge(Integer.toString(allocId), GenMySignature(new_stmt.getLValue(),cur_clone_depth));
                     allocId = 0;
                 }
             } else if (statement instanceof Copy copy_stmt){
@@ -289,7 +294,9 @@ public class Anderson {
 
     /**
      * Initialize the points-to-sets given all the new-constraints
+     * @deprecated
      */
+    @Deprecated
     public void InitPTS(){
         for(NewConstraint newConstraint : newConstraintList){
             if(!pts.containsKey(newConstraint.to)){
@@ -304,10 +311,11 @@ public class Anderson {
      */
     public void InitJobs(){
         for(NewConstraint newConstraint : newConstraintList){
-            if(!Jobs.containsKey(newConstraint.to)){
-                Jobs.put(newConstraint.to, new TreeSet<>());
+            String allocId_str = Integer.toString(newConstraint.allocId);
+            if(!Jobs.containsKey(allocId_str)){
+                Jobs.put(allocId_str, new TreeSet<>());
             }
-            Jobs.get(newConstraint.to).add(newConstraint.allocId);
+            Jobs.get(allocId_str).add(newConstraint.allocId);
         }
     }
 
@@ -386,7 +394,12 @@ public class Anderson {
         } else {
             depth = clone_depth;
         }
+//        if(invoke.getInvokeExp().getMethodRef().resolve().getParamName(arg_cnt) == null){
+//            System.out.println(invoke.getInvokeExp().getMethodRef().resolve().getIR().getParam(arg_cnt));
+//            System.out.println(arg_cnt);
+//            //throw new RuntimeException();
+//        }
         return depth + invoke.getInvokeExp().getMethodRef().resolve().getSignature() +
-                invoke.getInvokeExp().getMethodRef().resolve().getParamName(arg_cnt);
+                invoke.getInvokeExp().getMethodRef().resolve().getIR().getParam(arg_cnt);
     }
 }
