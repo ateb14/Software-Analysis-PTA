@@ -162,20 +162,10 @@ public class Anderson {
 
         /* Initialize the constraints by method */
         InitConstraints(world.getMainMethod());
-        //        for(NewConstraint newConstraint : newConstraintList){
-//        System.out.println(newConstraint.to + " " + newConstraint.allocId);
-//        }
-//        for(AssignConstraint assignConstraint : assignConstraintList){
-//        System.out.println(assignConstraint.to + " " + assignConstraint.from);
-//        }
-        //InitPTS();
+
 //        System.out.println("NewConstraints:");
-//        for(Map.Entry<String, TreeSet<Integer>> entry: pts.entrySet()){
-//            System.out.println(entry.getKey() + ":");
-//            for(Integer alloc : entry.getValue()){
-//                System.out.print(alloc + " ");
-//            }
-//            System.out.print("\n");
+//        for(NewConstraint newConstraint: newConstraintList){
+//            System.out.println(newConstraint.allocId + " " + newConstraint.to);
 //        }
 //        System.out.println("Queries:");
 //        for(Map.Entry<Integer, String> entry : queries.entrySet()){
@@ -230,10 +220,7 @@ public class Anderson {
                     continue;
                 }
 
-                if(invoke_stmt.getLValue() != null){
-                    /** @// TODO: 2022/11/6 deal with the return value  */
-
-                }
+                // pass the arguments
                 List<Var> args= invoke_stmt.getInvokeExp().getArgs();
                 int arg_cnt = 0;
                 for(Var arg : args){
@@ -244,10 +231,18 @@ public class Anderson {
                     ++ arg_cnt;
                 }
 
-
                 // Recursively construct...
                 // it may throw an exception if the resolving process fails
                 InitConstraints(invoke_stmt.getInvokeExp().getMethodRef().resolve());
+
+
+                // receive the return value
+                if(invoke_stmt.getLValue() != null){
+                    AddEdge(
+                            FetctReturnSignature(0, invoke_stmt),
+                            GenMySignature(invoke_stmt.getResult(), cur_clone_depth)
+                    );
+                }
             } else if (statement instanceof New new_stmt) {
                 // New -> Var = NewExp; NewExp -> NewInstance | NewArray | NewMultiArray.
                 // NewInstance -> new ClassType
@@ -376,6 +371,21 @@ public class Anderson {
         }
         //System.out.println(sig);
         return sig;
+    }
+
+    private String FetctReturnSignature(int ret_cnt, Invoke invoke){
+        int depth;
+        String method_sig = invoke.getMethodRef().resolve().getSignature();
+        if(!method_counter_map.containsKey(method_sig)){ // not cloned yet
+            // actually this won't happen
+            depth = 1;
+        } else if(method_counter_map.get(method_sig) < clone_depth){
+            depth = clone_depth + 1;
+        } else {
+            depth = clone_depth;
+        }
+        return depth + invoke.getInvokeExp().getMethodRef().resolve().getSignature() +
+                invoke.getMethodRef().resolve().getIR().getReturnVars().get(ret_cnt);
     }
 
     /**
