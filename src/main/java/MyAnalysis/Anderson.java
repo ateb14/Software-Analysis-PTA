@@ -187,22 +187,22 @@ public class Anderson {
         /* Initialize the constraints by method */
         InitConstraints(world.getMainMethod());
 
-//        System.out.println("NewConstraints:");
-//        for(NewConstraint newConstraint: newConstraintList){
-//            System.out.println(newConstraint.allocId + " " + newConstraint.to);
-//        }
-//        System.out.println("Queries:");
-//        for(Map.Entry<Integer, String> entry : queries.entrySet()){
-//            System.out.println(entry.getKey() + " " + entry.getValue());
-//        }
-//        System.out.println("Graph:");
-//        for(Map.Entry<String, TreeSet<String> > entry : graph.entrySet()){
-//            System.out.println(entry.getKey() + " flows to:");
-//            for(String to : entry.getValue()){
-//                System.out.print("    " + to + " ");
-//            }
-//            System.out.print("\n");
-//        }
+        System.out.println("NewConstraints:");
+        for(NewConstraint newConstraint: newConstraintList){
+            System.out.println(newConstraint.allocId + " " + newConstraint.to);
+        }
+        System.out.println("Queries:");
+        for(Map.Entry<Integer, String> entry : queries.entrySet()){
+            System.out.println(entry.getKey() + " " + entry.getValue());
+        }
+        System.out.println("Graph:");
+        for(Map.Entry<String, TreeSet<String> > entry : graph.entrySet()){
+            System.out.println(entry.getKey() + " flows to:");
+            for(String to : entry.getValue()){
+                System.out.print("    " + to + " ");
+            }
+            System.out.print("\n");
+        }
         InitJobs();
 
     }
@@ -268,6 +268,7 @@ public class Anderson {
 
 
                 // receive the return value
+                // invoke -> var = InvokeExp
                 if(invoke_stmt.getLValue() != null){
                     int ret_num = invoke_stmt.getInvokeExp().getMethodRef().resolve().getIR().getReturnVars().size();
                     for(int i=0;i<ret_num;++i) {
@@ -294,6 +295,9 @@ public class Anderson {
                         GenMySignature(copy_stmt.getLValue(), cur_clone_depth)
                 );
             } else if (statement instanceof LoadField lf_stmt){
+                /**
+                 * @// TODO: 2022/11/8 FieldSensitivity @xhz
+                 */
                 // LoadField -> Var = FieldAccess;
                 // FieldAccess -> InstanceFieldAccess | StaticFieldAccess
                 AddEdge(
@@ -301,6 +305,9 @@ public class Anderson {
                         GenMySignature(lf_stmt.getLValue(), cur_clone_depth)
                 );
             } else if (statement instanceof StoreField sf_stmt){
+                /**
+                 * @// TODO: 2022/11/8 FieldSensitivity @xhz
+                 */
                 // StoreField -> FieldAccess = Var;
                 AddEdge(
                         GenMySignature(sf_stmt.getRValue(), cur_clone_depth),
@@ -427,7 +434,7 @@ public class Anderson {
             sig = depth + var.getMethod().getSignature() + var.getName();
         } else if (exp instanceof FieldAccess fa_exp){
             //System.out.println("field");
-            /**@// TODO: 2022/11/7 We use filed-based analysis for now, needed to get improved  */
+            /**@// TODO: 2022/11/7 We use field-based analysis for now, needed to get improved  */
             sig = fa_exp.getFieldRef().resolve().getSignature();
             //sig = depth + "." + fa_exp;
         } else {
