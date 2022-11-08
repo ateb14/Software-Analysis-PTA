@@ -46,7 +46,7 @@ public class Anderson {
      *  These are the necessary components for clone-based inter-procedural analysis.
      */
     private Map<String, Integer> method_counter_map = new TreeMap<>();
-    public final int clone_depth = 10;
+    public final int clone_depth = 30;
 
     /**
      * This map is used to detect the cycles in the call graph.
@@ -75,7 +75,7 @@ public class Anderson {
     TreeMap<Integer, String> queries = new TreeMap<>();
 
     /**
-     * pointer-propagation job list
+     * object-propagation job list
      */
     Map<String, TreeSet<Integer> > Jobs = new TreeMap<>();
 
@@ -145,6 +145,7 @@ public class Anderson {
 
     /**
      * Propagate the pointer-flow by one hop and update the Jobs queue
+     * @// TODO: 2022/11/8 Consider the objects
      */
     private void Propagate(){
         Map<String, TreeSet<Integer> > new_job = new TreeMap<>();
@@ -177,7 +178,7 @@ public class Anderson {
     }
 
     /**
-     * Initialized everything
+     * Initialize everything
      */
     public void Initialize(){
 
@@ -216,6 +217,9 @@ public class Anderson {
             return;
         }
 
+        /**
+         * @// TODO: 2022/11/8 The function shouldn't return now, it has to propagate the objects in the cycle to this method
+         */
         if(DetectCycle(method)){
             return;
         }
