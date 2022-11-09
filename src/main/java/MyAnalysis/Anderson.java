@@ -256,6 +256,7 @@ public class Anderson {
         for(Stmt statement : statements){
             if (statement instanceof Invoke invoke_stmt){
                 String signature = invoke_stmt.getMethodRef().toString();
+                System.out.println("The invoked method is: "+signature);
 
                 // These statements may throw exceptions if the argument is not a constant, handle them?
                 if (signature.equals("<benchmark.internal.Benchmark: void alloc(int)>") ||
@@ -276,25 +277,63 @@ public class Anderson {
 
                 // pass the arguments
                 List<Var> args= invoke_stmt.getInvokeExp().getArgs();
+                /**
+                 * If this function belongs to a Var, then %this should be connected with this Var.
+                 * (Important!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!)
+                 */
+                if(invoke_stmt.getInvokeExp() instanceof InvokeInstanceExp instExp)
+                {
+                    Var base = instExp.getBase();
+                    Var this_ = instExp.getMethodRef().resolve().getIR().getThis();
+                    String baseSig = GenMySignature(base, cur_clone_depth);
+                    String thisSig = GenMySignature(this_, cur_clone_depth);
+                    AddEdge(
+                            baseSig,
+                            thisSig
+                    );
+//                    AddEdge(
+//                            GenMySignature(this_, cur_clone_depth),
+//                            GenMySignature(base, cur_clone_depth)
+//                    );
+                    for(FieldAccess field: getAllFields(base, this_))
+                    {
+                        AddEdge(
+                                GenSynthesizedFieldSignature(baseSig, field),
+                                GenSynthesizedFieldSignature(thisSig, field)
+                        );
+                        AddEdge(
+                                GenSynthesizedFieldSignature(thisSig, field),
+                                GenSynthesizedFieldSignature(baseSig, field)
+                        );
+                        // Hopefully right!
+                    }
+                }
                 int arg_cnt = 0;
                 for(Var arg : args){
-                    // @TODO: Passing arguments should be treated as copy statement. @xhz
+                    /**
+                     * Passed args are treated the same as copy statements:
+                     *  formalArg = arg;
+                     * which means:
+                     *  formalArg contains arg
+                     *  formalArg.f = arg.f, for each field f.
+                     */
                     Var formalArg = invoke_stmt.getInvokeExp().getMethodRef().resolve().getIR().getParam(arg_cnt);
                     String formalArgSig = FetchFormalArgSignature(arg_cnt, invoke_stmt); // Inside the function!
+                    String argSig = GenMySignature(arg, cur_clone_depth);
                     AddEdge(
-                            GenMySignature(arg, cur_clone_depth),
+                            argSig,
                             formalArgSig
                     );
                     /* a.f = b.f for each f in b's fields. */
                     for(FieldAccess field: getAllFields(arg, formalArg))
                     {
                         AddEdge(
-                                GenMySignature(field, cur_clone_depth),
+                                GenSynthesizedFieldSignature(argSig, field),
                                 GenSynthesizedFieldSignature(formalArgSig, field)
                         );
                         AddEdge(
                                 GenSynthesizedFieldSignature(formalArgSig, field),
-                                GenMySignature(field, cur_clone_depth)
+                                GenSynthesizedFieldSignature(argSig, field)
                         );
                         // Hopefully right!
                     }
@@ -312,29 +351,32 @@ public class Anderson {
                     int ret_num = invoke_stmt.getInvokeExp().getMethodRef().resolve().getIR().getReturnVars().size();
                     for(int i=0;i<ret_num;++i) {
                         /**
-                         * result = m();
+                         * Return values are treated the same as copy statements:
+                         *  result = retVal;
                          * which means
                          *  result contains retVal
-                         *  result.f = retVal.f
+                         *  result.f = retVal.f, for each field f.
                          */
-                        String returnSig = FetchReturnSignature(i, invoke_stmt); // Callee!
-                        String resultSig = GenMySignature(invoke_stmt.getResult(), cur_clone_depth); // Caller!
                         Var returnVar = invoke_stmt.getMethodRef().resolve().getIR().getReturnVars().get(i); // Callee!
                         Var resultVar = invoke_stmt.getResult(); // Caller!
+                        String resultSig = GenMySignature(resultVar, cur_clone_depth); // Caller!
+                        String returnSig = FetchReturnSignature(i, invoke_stmt); // Callee!
+                        System.out.println("Returned Var: "+returnSig);
+                        System.out.println("Result Var: "+resultSig);
                         AddEdge(
                                 returnSig,
-                                GenMySignature(resultVar, cur_clone_depth)
+                                resultSig
                         );
                         /* a.f = b.f for each f in b's fields. */
                         for(FieldAccess field: getAllFields(returnVar, resultVar))
                         {
                             AddEdge(
-                                    GenMySignature(field, cur_clone_depth),
+                                    GenSynthesizedFieldSignature(returnSig, field),
                                     GenSynthesizedFieldSignature(resultSig, field)
                             );
                             AddEdge(
                                     GenSynthesizedFieldSignature(resultSig, field),
-                                    GenMySignature(field, cur_clone_depth)
+                                    GenSynthesizedFieldSignature(returnSig, field)
                             );
                             // Hopefully right!
                         }
@@ -346,7 +388,11 @@ public class Anderson {
                  New -> Var = NewExp; NewExp -> NewInstance | NewArray | NewMultiArray.
                  NewInstance -> new ClassType
                  For Tai-e, the Var is always temp$k?
+                 @// TODO: Connect the %this symbol and the temp$k symbol!!! (Important!!!)
+                 If we know the clone cnt of the init() function,
+                 we could know the signature of %this symbol in the init() function.
                 */
+
                 AddNewConstraints(GenMySignature(new_stmt.getLValue(), cur_clone_depth), allocId); // map temp$k(heap var) to allocId
                 AddEdge(Integer.toString(allocId), GenMySignature(new_stmt.getLValue(),cur_clone_depth));
                 all_allocIds.add(allocId);
@@ -363,21 +409,23 @@ public class Anderson {
                  *  a.f = b.f
                  */
                 Var lhsVar = copy_stmt.getLValue(), rhsVar = copy_stmt.getRValue();
+                String lhsSig = GenMySignature(lhsVar, cur_clone_depth);
+                String rhsSig = GenMySignature(rhsVar, cur_clone_depth);
                 /* a contains b */
                 AddEdge(
-                        GenMySignature(rhsVar, cur_clone_depth),
-                        GenMySignature(lhsVar, cur_clone_depth)
+                        rhsSig,
+                        lhsSig
                 );
                 /* a.f = b.f for each f in b's fields. */
                 for(FieldAccess field: getAllFields(lhsVar, rhsVar))
                 {
                     AddEdge(
-                            GenMySignature(field, cur_clone_depth),
-                            GenSynthesizedFieldSignature(lhsVar, cur_clone_depth, field)
+                            GenSynthesizedFieldSignature(rhsSig, field),
+                            GenSynthesizedFieldSignature(lhsSig, field)
                     );
                     AddEdge(
-                            GenSynthesizedFieldSignature(lhsVar, cur_clone_depth, field),
-                            GenMySignature(field, cur_clone_depth)
+                            GenSynthesizedFieldSignature(lhsSig, field),
+                            GenSynthesizedFieldSignature(rhsSig, field)
                     );
                     // Hopefully right!
                 }
