@@ -394,7 +394,6 @@ public class Anderson {
                  New -> Var = NewExp; NewExp -> NewInstance | NewArray | NewMultiArray.
                  NewInstance -> new ClassType
                  For Tai-e, the Var is always temp$k?
-                 @// TODO: Connect the %this symbol and the temp$k symbol!!! (Important!!!)
                  If we know the clone cnt of the init() function,
                  we could know the signature of %this symbol in the init() function.
                 */
@@ -549,6 +548,7 @@ public class Anderson {
      */
     private ArrayList<FieldAccess> getAllFields(Var var1, Var var2)
     {
+        // @TODO: This function cannot find all fields, which cause wrong results!!!!!!!!!!!! @xhz
         ArrayList<FieldAccess> ans = getAllFields(var1);
         ans.addAll(getAllFields(var2));
         return ans;
