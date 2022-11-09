@@ -4,10 +4,12 @@ import pascal.taie.World;
 import pascal.taie.ir.exp.*;
 import pascal.taie.ir.stmt.*;
 import pascal.taie.language.classes.JMethod;
+import pascal.taie.language.type.Type;
 
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.util.*;
 
 class NewConstraint {
@@ -50,6 +52,7 @@ public class Anderson {
      * This map is used to detect the cycles in the call graph.
      */
     private Map<String, Integer> single_path_visited_counter = new TreeMap<>();
+
 
 
     private void PrintPTS()
@@ -396,6 +399,7 @@ public class Anderson {
                  */
                 Var lhsVar = lf_stmt.getLValue();
                 FieldAccess rhsField = lf_stmt.getRValue();
+
                 /* a contains b.f */
                 AddEdge(
                         GenMySignature(rhsField, cur_clone_depth),
