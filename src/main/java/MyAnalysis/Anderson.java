@@ -276,13 +276,14 @@ public class Anderson {
                 int arg_cnt = 0;
                 for(Var arg : args){
                     // @TODO: Passing arguments should be treated as copy statement. @xhz
+                    Var formalArg = invoke_stmt.getInvokeExp().getMethodRef().resolve().getIR().getParam(arg_cnt);
                     String formalArgSig = FetchFormalArgSignature(arg_cnt, invoke_stmt); // Inside the function!
                     AddEdge(
                             GenMySignature(arg, cur_clone_depth),
                             formalArgSig
                     );
                     /* a.f = b.f for each f in b's fields. */
-                    for(FieldAccess field: getAllFields(arg))
+                    for(FieldAccess field: getAllFields(arg, formalArg))
                     {
                         AddEdge(
                                 GenMySignature(field, cur_clone_depth),
@@ -307,16 +308,22 @@ public class Anderson {
                 if(invoke_stmt.getLValue() != null){
                     int ret_num = invoke_stmt.getInvokeExp().getMethodRef().resolve().getIR().getReturnVars().size();
                     for(int i=0;i<ret_num;++i) {
-                        // @TODO: Passing arguments should be treated as copy statement. @xhz
+                        /**
+                         * result = m();
+                         * which means
+                         *  result contains retVal
+                         *  result.f = retVal.f
+                         */
                         String returnSig = FetchReturnSignature(i, invoke_stmt); // Callee!
                         String resultSig = GenMySignature(invoke_stmt.getResult(), cur_clone_depth); // Caller!
                         Var returnVar = invoke_stmt.getMethodRef().resolve().getIR().getReturnVars().get(i); // Callee!
+                        Var resultVar = invoke_stmt.getResult(); // Caller!
                         AddEdge(
                                 returnSig,
-                                GenMySignature(invoke_stmt.getResult(), cur_clone_depth)
+                                GenMySignature(resultVar, cur_clone_depth)
                         );
                         /* a.f = b.f for each f in b's fields. */
-                        for(FieldAccess field: getAllFields(returnVar))
+                        for(FieldAccess field: getAllFields(returnVar, resultVar))
                         {
                             AddEdge(
                                     GenMySignature(field, cur_clone_depth),
@@ -331,19 +338,18 @@ public class Anderson {
                     }
                 }
             } else if (statement instanceof New new_stmt) {
-                // New -> Var = NewExp; NewExp -> NewInstance | NewArray | NewMultiArray.
-                // NewInstance -> new ClassType
-                // For Tai-e, the Var is always temp$k?
-                if(allocId != 0) {
-                    AddNewConstraints(GenMySignature(new_stmt.getLValue(), cur_clone_depth), allocId); // map temp$k(heap var) to allocId
-                    AddEdge(Integer.toString(allocId), GenMySignature(new_stmt.getLValue(),cur_clone_depth));
-                    all_allocIds.add(allocId);
-                    allocId = 0;
-                }
+                if(allocId == 0) continue;
+                /*
+                 New -> Var = NewExp; NewExp -> NewInstance | NewArray | NewMultiArray.
+                 NewInstance -> new ClassType
+                 For Tai-e, the Var is always temp$k?
+                */
+                AddNewConstraints(GenMySignature(new_stmt.getLValue(), cur_clone_depth), allocId); // map temp$k(heap var) to allocId
+                AddEdge(Integer.toString(allocId), GenMySignature(new_stmt.getLValue(),cur_clone_depth));
+                all_allocIds.add(allocId);
+                allocId = 0; // No need? There may be many new() statements in an init() function.
             } else if (statement instanceof Copy copy_stmt){
                 /**
-                 * // @TODO: Implement copy statements with fields. @xhz
-                 *
                  * Copy -> Var = Var;
                  *
                  * (Field Unroll Once)
@@ -360,7 +366,7 @@ public class Anderson {
                         GenMySignature(lhsVar, cur_clone_depth)
                 );
                 /* a.f = b.f for each f in b's fields. */
-                for(FieldAccess field: getAllFields(rhsVar))
+                for(FieldAccess field: getAllFields(lhsVar, rhsVar))
                 {
                     AddEdge(
                             GenMySignature(field, cur_clone_depth),
@@ -454,12 +460,11 @@ public class Anderson {
     }
 
     /**
-     * Utility function for getting all fields of a variable.
+     * Utility function for getting all fields of two variables.
      * @param var Target Tai-e Var
      * @return An ArrayList containing the FieldAccess of each field of {@code var}.
      */
-    private List<FieldAccess> getAllFields(Var var)
-    {
+    private ArrayList<FieldAccess> getAllFields(Var var) {
         ArrayList<FieldAccess> ans = new ArrayList<>();
         for(StoreField sf_stmt: var.getStoreFields())
         {
@@ -469,11 +474,25 @@ public class Anderson {
         {
             ans.add(lf_stmt.getFieldAccess());
         }
-        System.out.println(GenMySignature(var, 114514)+" has "+ans.size()+" fields: ");
+        System.out.println(
+                GenMySignature(var, 114514)+" has "+ans.size()+" active fields: ");
         for(FieldAccess field: ans)
         {
             System.out.println("    "+GenMySignature(field, 114514));
         }
+        return ans;
+    }
+
+    /**
+     * Utility function for getting all fields of two variables.
+     * @param var1 Target Tai-e Var 1
+     * @param var2 Target Tai-e Var 2
+     * @return An ArrayList containing the FieldAccess of each field of {@code var1, var2}.
+     */
+    private ArrayList<FieldAccess> getAllFields(Var var1, Var var2)
+    {
+        ArrayList<FieldAccess> ans = getAllFields(var1);
+        ans.addAll(getAllFields(var2));
         return ans;
     }
 
