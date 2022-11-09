@@ -275,10 +275,25 @@ public class Anderson {
                 List<Var> args= invoke_stmt.getInvokeExp().getArgs();
                 int arg_cnt = 0;
                 for(Var arg : args){
+                    // @TODO: Passing arguments should be treated as copy statement. @xhz
+                    String formalArgSig = FetchFormalArgSignature(arg_cnt, invoke_stmt); // Inside the function!
                     AddEdge(
                             GenMySignature(arg, cur_clone_depth),
-                            FetchFormalArgSignature(arg_cnt, invoke_stmt)
+                            formalArgSig
                     );
+                    /* a.f = b.f for each f in a's fields. */
+                    for(FieldAccess field: getAllFields(arg))
+                    {
+                        AddEdge(
+                                GenMySignature(field, cur_clone_depth),
+                                GenSynthesizedFieldSignature(formalArgSig, field)
+                        );
+                        AddEdge(
+                                GenSynthesizedFieldSignature(formalArgSig, field),
+                                GenMySignature(field, cur_clone_depth)
+                        );
+                        // Hopefully right!
+                    }
                     ++ arg_cnt;
                 }
 
@@ -293,10 +308,24 @@ public class Anderson {
                     int ret_num = invoke_stmt.getInvokeExp().getMethodRef().resolve().getIR().getReturnVars().size();
                     for(int i=0;i<ret_num;++i) {
                         // @TODO: Passing arguments should be treated as copy statement. @xhz
+                        String returnSig = FetchReturnSignature(i, invoke_stmt); // Inside the function!
                         AddEdge(
-                                FetchReturnSignature(i, invoke_stmt),
+                                returnSig,
                                 GenMySignature(invoke_stmt.getResult(), cur_clone_depth)
                         );
+                        /* a.f = b.f for each f in a's fields. */
+                        for(FieldAccess field: getAllFields(invoke_stmt.getLValue()))
+                        {
+                            AddEdge(
+                                    GenMySignature(field, cur_clone_depth),
+                                    GenSynthesizedFieldSignature(returnSig, field)
+                            );
+                            AddEdge(
+                                    GenSynthesizedFieldSignature(returnSig, field),
+                                    GenMySignature(field, cur_clone_depth)
+                            );
+                            // Hopefully right!
+                        }
                     }
                 }
             } else if (statement instanceof New new_stmt) {
@@ -311,14 +340,36 @@ public class Anderson {
                 }
             } else if (statement instanceof Copy copy_stmt){
                 /**
-                 * // @TODO: Implement copy statements with fields.
+                 * // @TODO: Implement copy statements with fields. @xhz
                  *
                  * Copy -> Var = Var;
+                 *
+                 * (Field Unroll Once)
+                 * statement:
+                 *  a = b;
+                 * which means:
+                 *  a contains b
+                 *  a.f = b.f
                  */
+                Var lhsVar = copy_stmt.getLValue(), rhsVar = copy_stmt.getRValue();
+                /* a contains b */
                 AddEdge(
-                        GenMySignature(copy_stmt.getRValue(), cur_clone_depth),
-                        GenMySignature(copy_stmt.getLValue(), cur_clone_depth)
+                        GenMySignature(rhsVar, cur_clone_depth),
+                        GenMySignature(lhsVar, cur_clone_depth)
                 );
+                /* a.f = b.f for each f in a's fields. */
+                for(FieldAccess field: getAllFields(lhsVar))
+                {
+                    AddEdge(
+                            GenMySignature(field, cur_clone_depth),
+                            GenSynthesizedFieldSignature(rhsVar, cur_clone_depth, field)
+                    );
+                    AddEdge(
+                            GenSynthesizedFieldSignature(rhsVar, cur_clone_depth, field),
+                            GenMySignature(field, cur_clone_depth)
+                    );
+                    // Hopefully right!
+                }
             } else if (statement instanceof LoadField lf_stmt){
                 /**
                  * @// TODO: Implement unrolling many times @xhz
@@ -398,6 +449,25 @@ public class Anderson {
             }
         }
         Traceback(method);
+    }
+
+    /**
+     * Utility function for getting all fields of a variable.
+     * @param var Target Tai-e Var
+     * @return An ArrayList containing the FieldAccess of each field of {@code var}.
+     */
+    private List<FieldAccess> getAllFields(Var var)
+    {
+        ArrayList<FieldAccess> ans = new ArrayList<>();
+        for(StoreField sf_stmt: var.getStoreFields())
+        {
+            ans.add(sf_stmt.getFieldAccess());
+        }
+        for(LoadField lf_stmt: var.getLoadFields())
+        {
+            ans.add(lf_stmt.getFieldAccess());
+        }
+        return ans;
     }
 
     /**
@@ -530,6 +600,20 @@ public class Anderson {
         String baseVarSig = curMethodSig + var.getName();
         String fieldSig = field.getFieldRef().resolve().getSignature();
         String sig = baseVarSig + fieldSig;
+        return sig;
+    }
+    /**
+     * Generate a synthesized signature of a field access,
+     * given a variable's existing signature and a field.
+     * Even if this var does not have this field, the fake signature will be generated.
+     * @param varSig The existing signature for the variable
+     * @param field The wanted field
+     * @return The synthesized signature of the field access
+     */
+    private String GenSynthesizedFieldSignature(String varSig, FieldAccess field)
+    {
+        String fieldSig = field.getFieldRef().resolve().getSignature();
+        String sig = varSig + fieldSig;
         return sig;
     }
 

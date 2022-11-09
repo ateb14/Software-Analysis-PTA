@@ -50,6 +50,6 @@ public class FieldSensitivity2 {
         BenchmarkN.alloc(9);
         FieldSensitivity2 var1 = new FieldSensitivity2();
         var1.test();
-        var1.test2();
+//        var1.test2();
     }
 }
