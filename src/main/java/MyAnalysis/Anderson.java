@@ -308,6 +308,23 @@ public class Anderson {
                  *
                  * (Field Unroll Once)
                  *
+                 *
+                 */
+                Var lhsVar = lf_stmt.getLValue();
+                FieldAccess rhsField = lf_stmt.getRValue();
+                // Placeholder
+                AddEdge(
+                        GenMySignature(lhsVar, cur_clone_depth),
+                        GenMySignature(rhsField, cur_clone_depth)
+                );
+
+            } else if (statement instanceof StoreField sf_stmt){
+                /**
+                 * @// TODO: Implement unrolling many times @xhz
+                 *
+                 * StoreField -> FieldAccess = Var;
+                 *
+                 * (Field Unroll Once)
                  * statement:
                  *  a.f = b;
                  * which means:
@@ -315,30 +332,22 @@ public class Anderson {
                  *  a.f = b.f
                  *
                  * L value is a.f(FieldAccess), R value is b(Var)
-                 *
                  */
+                FieldAccess lhsField = sf_stmt.getLValue();
+                Var rhsVar = sf_stmt.getRValue();
                 /* a.f contains b */
                 AddEdge(
-                        GenMySignature(lf_stmt.getRValue(), cur_clone_depth),
-                        GenMySignature(lf_stmt.getLValue(), cur_clone_depth)
+                        GenMySignature(rhsVar, cur_clone_depth),
+                        GenMySignature(lhsField, cur_clone_depth)
                 );
                 /* a.f = b.f, double edge */
                 AddEdge(
-                    GenMySignature(lf_stmt.getRValue(), cur_clone_depth),
-                    GenMySignature(, cur_clone_depth) // How to get b.f?
+                        GenMySignature(lhsField, cur_clone_depth),
+                        GenSynthesizedFieldSignature(rhsVar, cur_clone_depth, lhsField)
                 );
                 AddEdge(
-                    GenMySignature(, cur_clone_depth),
-                    GenMySignature(lf_stmt.getRValue(), cur_clone_depth)
-                );
-            } else if (statement instanceof StoreField sf_stmt){
-                /**
-                 * @// TODO: 2022/11/8 FieldSensitivity @xhz
-                 */
-                // StoreField -> FieldAccess = Var;
-                AddEdge(
-                        GenMySignature(sf_stmt.getRValue(), cur_clone_depth),
-                        GenMySignature(sf_stmt.getLValue(), cur_clone_depth)
+                        GenSynthesizedFieldSignature(rhsVar, cur_clone_depth, lhsField),
+                        GenMySignature(lhsField, cur_clone_depth)
                 );
             } else if (statement instanceof StoreArray sa_stmt){
                 // StoreArray -> ArrayAccess = Var;
