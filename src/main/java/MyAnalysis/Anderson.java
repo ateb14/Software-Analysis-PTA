@@ -1,9 +1,7 @@
 package MyAnalysis;
 
 import pascal.taie.World;
-import pascal.taie.ir.exp.Exp;
-import pascal.taie.ir.exp.FieldAccess;
-import pascal.taie.ir.exp.Var;
+import pascal.taie.ir.exp.*;
 import pascal.taie.ir.stmt.*;
 import pascal.taie.language.classes.JMethod;
 
@@ -55,7 +53,7 @@ public class Anderson {
 
 
     /**
-     * Statement: LHS = RHS, 
+     * Statement: LHS = RHS,
      * which means LHS set contains RHS set (RHS flows to LHS)
      * @param from The var/symbol in the RHS
      * @param to The var/symbol in the LHS
@@ -279,7 +277,7 @@ public class Anderson {
                     int ret_num = invoke_stmt.getInvokeExp().getMethodRef().resolve().getIR().getReturnVars().size();
                     for(int i=0;i<ret_num;++i) {
                         AddEdge(
-                                FetctReturnSignature(i, invoke_stmt),
+                                FetchReturnSignature(i, invoke_stmt),
                                 GenMySignature(invoke_stmt.getResult(), cur_clone_depth)
                         );
                     }
@@ -304,20 +302,20 @@ public class Anderson {
                 /**
                  * @// TODO: 2022/11/9 Complete unrolling once @xhz
                  * @// TODO: Implement unrolling many times @xhz
-                 * 
+                 *
                  * LoadField -> Var = FieldAccess;
                  * FieldAccess -> InstanceFieldAccess | StaticFieldAccess
-                 * 
+                 *
                  * (Field Unroll Once)
-                 * 
+                 *
                  * statement:
                  *  a.f = b;
                  * which means:
                  *  a.f contains b
                  *  a.f = b.f
-                 * 
-                 * L value is a.f(FieldAccess), R value is b(Var) 
-                 * 
+                 *
+                 * L value is a.f(FieldAccess), R value is b(Var)
+                 *
                  */
                 /* a.f contains b */
                 AddEdge(
@@ -451,26 +449,44 @@ public class Anderson {
     }
 
     /**
-     * Generate a signature given an expression and its clone-depth
+     * Generate a signature, given an expression and its clone-depth
      * @param exp The given Tai-e expression
      * @param depth The clone-depth of the method of the given expression
      * @return The generated signature
      */
     private String GenMySignature(Exp exp, int depth){
         String sig;
-        String curMethodSig = depth + exp.getMethod().getSignature();
         if (exp instanceof Var var){
-            //System.out.println("var");
+            String curMethodSig = depth + var.getMethod().getSignature();
             sig = curMethodSig + var.getName();
-        } else if (exp instanceof FieldAccess fa_exp){
-            //System.out.println("field");
-            /**@// TODO: 2022/11/9 Test if this signature works right!  */
-            sig = curMethodSig + fa_exp.getFieldRef().resolve().getSignature();
-            //sig = depth + "." + fa_exp;
+        } else if (exp instanceof InstanceFieldAccess iField){
+            String curMethodSig = depth + iField.getBase().getMethod().getSignature();
+            String baseVarName = iField.getBase().getName();
+            String fieldSig = iField.getFieldRef().resolve().getSignature();
+            sig = curMethodSig + baseVarName + fieldSig;
+        } else if (exp instanceof StaticFieldAccess sField) {
+            sig = sField.getFieldRef().resolve().getSignature();
         } else {
             sig = null;
         }
         //System.out.println(sig);
+        return sig;
+    }
+
+    /**
+     * Generate a synthesized signature of a field access, given a var, its clone-depth and a field.
+     * Even if this var does not have this field, the fake signature will be generated.
+     * @param var The given Tai-e Var
+     * @param depth The clone-depth of the method of the given expression
+     * @param field The wanted field
+     * @return The synthesized signature of the field access
+     */
+    private String GenSynthesizedFieldSignature(Var var, int depth, FieldAccess field)
+    {
+        String curMethodSig = depth + var.getMethod().getSignature();
+        String baseVarSig = curMethodSig + var.getName();
+        String fieldSig = field.getFieldRef().resolve().getSignature();
+        String sig = baseVarSig + fieldSig;
         return sig;
     }
 
@@ -480,7 +496,7 @@ public class Anderson {
      * @param invoke the invoke statement
      * @return the signature
      */
-    private String FetctReturnSignature(int ret_cnt, Invoke invoke){
+    private String FetchReturnSignature(int ret_cnt, Invoke invoke){
         int depth;
         String method_sig = invoke.getMethodRef().resolve().getSignature();
         if(!method_counter_map.containsKey(method_sig)){ // not cloned yet
