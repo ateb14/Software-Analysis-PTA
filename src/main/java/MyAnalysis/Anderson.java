@@ -275,7 +275,7 @@ public class Anderson {
                     continue;
                 }
 
-                // pass the arguments
+                // Pass the arguments, returns and %this symbols
                 List<Var> args= invoke_stmt.getInvokeExp().getArgs();
                 /**
                  * If this function belongs to a Var, then %this should be connected with this Var.
@@ -286,7 +286,7 @@ public class Anderson {
                     Var base = instExp.getBase();
                     Var this_ = instExp.getMethodRef().resolve().getIR().getThis();
                     String baseSig = GenMySignature(base, cur_clone_depth);
-                    String thisSig = GenMySignature(this_, cur_clone_depth);
+                    String thisSig = GenMySignature(this_, getNewInvokeCloneID(invoke_stmt));
                     AddEdge(
                             baseSig,
                             thisSig
@@ -693,6 +693,23 @@ public class Anderson {
         String fieldSig = field.getFieldRef().resolve().getSignature();
         String sig = varSig + fieldSig;
         return sig;
+    }
+
+    private int getNewInvokeCloneID(Invoke invoke)
+    {
+        int depth;
+        String method_sig = invoke.getMethodRef().resolve().getSignature();
+        if(!method_counter_map.containsKey(method_sig)){ // not cloned yet
+            depth = 1;
+        } else{
+            int counter = method_counter_map.get(method_sig);
+            if(counter < clone_depth){
+                depth = counter + 1;
+            } else {
+                depth = clone_depth;
+            }
+        }
+        return depth;
     }
 
     /**
