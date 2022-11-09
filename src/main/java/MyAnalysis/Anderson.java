@@ -292,6 +292,7 @@ public class Anderson {
                 if(invoke_stmt.getLValue() != null){
                     int ret_num = invoke_stmt.getInvokeExp().getMethodRef().resolve().getIR().getReturnVars().size();
                     for(int i=0;i<ret_num;++i) {
+                        // @TODO: Passing arguments should be treated as copy statement. @xhz
                         AddEdge(
                                 FetchReturnSignature(i, invoke_stmt),
                                 GenMySignature(invoke_stmt.getResult(), cur_clone_depth)
@@ -309,29 +310,46 @@ public class Anderson {
                     allocId = 0;
                 }
             } else if (statement instanceof Copy copy_stmt){
-                // Copy -> Var = Var;
+                /**
+                 * // @TODO: Implement copy statements with fields.
+                 *
+                 * Copy -> Var = Var;
+                 */
                 AddEdge(
                         GenMySignature(copy_stmt.getRValue(), cur_clone_depth),
                         GenMySignature(copy_stmt.getLValue(), cur_clone_depth)
                 );
             } else if (statement instanceof LoadField lf_stmt){
                 /**
-                 * @// TODO: 2022/11/9 Complete unrolling once @xhz
                  * @// TODO: Implement unrolling many times @xhz
                  *
                  * LoadField -> Var = FieldAccess;
                  * FieldAccess -> InstanceFieldAccess | StaticFieldAccess
                  *
                  * (Field Unroll Once)
+                 * statement:
+                 *  a = b.f;
+                 * which means:
+                 *  a contains b.f
+                 *  a.f = b.f
                  *
-                 *
+                 * L value is a(Var), R value is b.f(FieldAccess)
                  */
                 Var lhsVar = lf_stmt.getLValue();
                 FieldAccess rhsField = lf_stmt.getRValue();
-                // Placeholder
+                /* a contains b.f */
                 AddEdge(
-                        GenMySignature(lhsVar, cur_clone_depth),
+                        GenMySignature(rhsField, cur_clone_depth),
+                        GenMySignature(lhsVar, cur_clone_depth)
+                );
+                /* a.f = b.f, double edge */
+                AddEdge(
+                        GenSynthesizedFieldSignature(lhsVar, cur_clone_depth, rhsField),
                         GenMySignature(rhsField, cur_clone_depth)
+                );
+                AddEdge(
+                        GenMySignature(rhsField, cur_clone_depth),
+                        GenSynthesizedFieldSignature(lhsVar, cur_clone_depth, rhsField)
                 );
 
             } else if (statement instanceof StoreField sf_stmt){
