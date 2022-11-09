@@ -219,7 +219,7 @@ public class Anderson {
         for(Map.Entry<String, TreeSet<String> > entry : graph.entrySet()){
             System.out.println(entry.getKey() + " flows to:");
             for(String to : entry.getValue()){
-                System.out.print("    " + to + " ");
+                System.out.println("    " + to);
             }
             System.out.print("\n");
         }
@@ -281,7 +281,7 @@ public class Anderson {
                             GenMySignature(arg, cur_clone_depth),
                             formalArgSig
                     );
-                    /* a.f = b.f for each f in a's fields. */
+                    /* a.f = b.f for each f in b's fields. */
                     for(FieldAccess field: getAllFields(arg))
                     {
                         AddEdge(
@@ -308,20 +308,22 @@ public class Anderson {
                     int ret_num = invoke_stmt.getInvokeExp().getMethodRef().resolve().getIR().getReturnVars().size();
                     for(int i=0;i<ret_num;++i) {
                         // @TODO: Passing arguments should be treated as copy statement. @xhz
-                        String returnSig = FetchReturnSignature(i, invoke_stmt); // Inside the function!
+                        String returnSig = FetchReturnSignature(i, invoke_stmt); // Callee!
+                        String resultSig = GenMySignature(invoke_stmt.getResult(), cur_clone_depth); // Caller!
+                        Var returnVar = invoke_stmt.getMethodRef().resolve().getIR().getReturnVars().get(i); // Callee!
                         AddEdge(
                                 returnSig,
                                 GenMySignature(invoke_stmt.getResult(), cur_clone_depth)
                         );
-                        /* a.f = b.f for each f in a's fields. */
-                        for(FieldAccess field: getAllFields(invoke_stmt.getLValue()))
+                        /* a.f = b.f for each f in b's fields. */
+                        for(FieldAccess field: getAllFields(returnVar))
                         {
                             AddEdge(
                                     GenMySignature(field, cur_clone_depth),
-                                    GenSynthesizedFieldSignature(returnSig, field)
+                                    GenSynthesizedFieldSignature(resultSig, field)
                             );
                             AddEdge(
-                                    GenSynthesizedFieldSignature(returnSig, field),
+                                    GenSynthesizedFieldSignature(resultSig, field),
                                     GenMySignature(field, cur_clone_depth)
                             );
                             // Hopefully right!
@@ -357,15 +359,15 @@ public class Anderson {
                         GenMySignature(rhsVar, cur_clone_depth),
                         GenMySignature(lhsVar, cur_clone_depth)
                 );
-                /* a.f = b.f for each f in a's fields. */
-                for(FieldAccess field: getAllFields(lhsVar))
+                /* a.f = b.f for each f in b's fields. */
+                for(FieldAccess field: getAllFields(rhsVar))
                 {
                     AddEdge(
                             GenMySignature(field, cur_clone_depth),
-                            GenSynthesizedFieldSignature(rhsVar, cur_clone_depth, field)
+                            GenSynthesizedFieldSignature(lhsVar, cur_clone_depth, field)
                     );
                     AddEdge(
-                            GenSynthesizedFieldSignature(rhsVar, cur_clone_depth, field),
+                            GenSynthesizedFieldSignature(lhsVar, cur_clone_depth, field),
                             GenMySignature(field, cur_clone_depth)
                     );
                     // Hopefully right!
@@ -466,6 +468,11 @@ public class Anderson {
         for(LoadField lf_stmt: var.getLoadFields())
         {
             ans.add(lf_stmt.getFieldAccess());
+        }
+        System.out.println(GenMySignature(var, 114514)+" has "+ans.size()+" fields: ");
+        for(FieldAccess field: ans)
+        {
+            System.out.println("    "+GenMySignature(field, 114514));
         }
         return ans;
     }
