@@ -164,6 +164,10 @@ public class Anderson {
             Propagate();
         }
         PrintPTS();
+        for(String sig: method_counter_map.keySet())
+        {
+            System.out.println(sig+": clone cnt "+method_counter_map.get(sig));
+        }
     }
 
     /**
@@ -255,6 +259,8 @@ public class Anderson {
         int allocId = 0;
         for(Stmt statement : statements){
             if (statement instanceof Invoke invoke_stmt){
+                JMethod newMethod = invoke_stmt.getMethodRef().resolve();
+                if (isLibrary(newMethod)) continue; // Important!!!!!!!!!!!!!!!!!!!!!!!!!
                 String signature = invoke_stmt.getMethodRef().toString();
                 System.out.println("The invoked method is: "+signature);
 
