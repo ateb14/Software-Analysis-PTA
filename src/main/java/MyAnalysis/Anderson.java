@@ -52,6 +52,21 @@ public class Anderson {
     private Map<String, Integer> single_path_visited_counter = new TreeMap<>();
 
 
+    private void PrintPTS()
+    {
+        System.out.println("Pointer Sets: ");
+        for(String sig: pts.keySet())
+        {
+            System.out.println("Symbol Signature: "+sig);
+            System.out.print("[");
+            for(Integer i: pts.get(sig))
+            {
+                System.out.print(i+", ");
+            }
+            System.out.println("]");
+        }
+    }
+
     /**
      * Statement: LHS = RHS,
      * which means LHS set contains RHS set (RHS flows to LHS)
@@ -145,6 +160,7 @@ public class Anderson {
         while(!Jobs.isEmpty()){
             Propagate();
         }
+        PrintPTS();
     }
 
     /**
