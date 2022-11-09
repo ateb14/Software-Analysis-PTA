@@ -54,6 +54,12 @@ public class Anderson {
     private Map<String, Integer> single_path_visited_counter = new TreeMap<>();
 
 
+    /**
+     * Statement: LHS = RHS, 
+     * which means LHS set contains RHS set (RHS flows to LHS)
+     * @param from The var/symbol in the RHS
+     * @param to The var/symbol in the LHS
+     */
     private void AddEdge(String from, String to){
         if(!graph.containsKey(from)){
             graph.put(from, new TreeSet<>());
@@ -296,13 +302,36 @@ public class Anderson {
                 );
             } else if (statement instanceof LoadField lf_stmt){
                 /**
-                 * @// TODO: 2022/11/8 FieldSensitivity @xhz
+                 * @// TODO: 2022/11/9 Complete unrolling once @xhz
+                 * @// TODO: Implement unrolling many times @xhz
+                 * 
+                 * LoadField -> Var = FieldAccess;
+                 * FieldAccess -> InstanceFieldAccess | StaticFieldAccess
+                 * 
+                 * (Field Unroll Once)
+                 * 
+                 * statement:
+                 *  a.f = b;
+                 * which means:
+                 *  a.f contains b
+                 *  a.f = b.f
+                 * 
+                 * L value is a.f(FieldAccess), R value is b(Var) 
+                 * 
                  */
-                // LoadField -> Var = FieldAccess;
-                // FieldAccess -> InstanceFieldAccess | StaticFieldAccess
+                /* a.f contains b */
                 AddEdge(
                         GenMySignature(lf_stmt.getRValue(), cur_clone_depth),
                         GenMySignature(lf_stmt.getLValue(), cur_clone_depth)
+                );
+                /* a.f = b.f, double edge */
+                AddEdge(
+                    GenMySignature(lf_stmt.getRValue(), cur_clone_depth),
+                    GenMySignature(, cur_clone_depth) // How to get b.f?
+                );
+                AddEdge(
+                    GenMySignature(, cur_clone_depth),
+                    GenMySignature(lf_stmt.getRValue(), cur_clone_depth)
                 );
             } else if (statement instanceof StoreField sf_stmt){
                 /**
@@ -429,13 +458,14 @@ public class Anderson {
      */
     private String GenMySignature(Exp exp, int depth){
         String sig;
+        String curMethodSig = depth + exp.getMethod().getSignature();
         if (exp instanceof Var var){
             //System.out.println("var");
-            sig = depth + var.getMethod().getSignature() + var.getName();
+            sig = curMethodSig + var.getName();
         } else if (exp instanceof FieldAccess fa_exp){
             //System.out.println("field");
-            /**@// TODO: 2022/11/7 We use field-based analysis for now, needed to get improved  */
-            sig = fa_exp.getFieldRef().resolve().getSignature();
+            /**@// TODO: 2022/11/9 Test if this signature works right!  */
+            sig = curMethodSig + fa_exp.getFieldRef().resolve().getSignature();
             //sig = depth + "." + fa_exp;
         } else {
             sig = null;
