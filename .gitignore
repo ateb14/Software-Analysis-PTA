@@ -4,6 +4,7 @@ bin/
 build/
 out/
 output/
+fuck.txt
 
 # MacOS hidden file
 .DS_Store
