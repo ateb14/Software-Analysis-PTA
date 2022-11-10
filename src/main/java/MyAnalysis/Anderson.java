@@ -1,9 +1,9 @@
 package MyAnalysis;
 
 import pascal.taie.World;
+import pascal.taie.language.classes.*;
 import pascal.taie.ir.exp.*;
 import pascal.taie.ir.stmt.*;
-import pascal.taie.language.classes.JMethod;
 
 import java.io.BufferedWriter;
 import java.io.FileWriter;
@@ -55,11 +55,11 @@ public class Anderson {
      * Stores all the fields that appear in the program.
      * If two fields have different signatures, they are definitely not the same field.
      * If two fields have the same field signature, they have the same field name, type and base class type.
-     * So, for all FieldAccesses with the same signature, we only have to store one instance.
-     * Why don't I use a set of Strings instead? FieldAccess contains more information,
-     * such as whether it is an InstanceFieldAccess or a StaticFieldAccess, which should be treated differently.
+     * So, for all JField with the same signature, we only have to store one instance.
+     * Why don't I use a set of Strings instead? JField contains more information,
+     * such as whether it is an Instance field or a Static field, which should be treated differently.
      */
-    private Map<String, FieldAccess> all_existing_fields = new TreeMap<>();
+    private Map<String, JField> all_existing_fields = new TreeMap<>();
 
 
 
@@ -220,6 +220,15 @@ public class Anderson {
 
         /* The entry method of the program */
 
+        /* Record every field. */
+        for(JClass jClass: world.getClassHierarchy().allClasses().toList())
+        {
+            for(JField jField: jClass.getDeclaredFields())
+            {
+                all_existing_fields.put(jField.getSignature(), jField);
+            }
+        }
+
         /* Initialize the constraints by method */
         InitConstraints(world.getMainMethod());
 
@@ -310,7 +319,7 @@ public class Anderson {
 //                            GenMySignature(this_, cur_clone_depth),
 //                            GenMySignature(base, cur_clone_depth)
 //                    );
-                    for(FieldAccess field: getAllFields(new Var[]{base, this_}))
+                    for(JField field: getAllFields(new Var[]{base, this_}))
                     {
                         AddEdge(
                                 GenSynthesizedFieldSignature(baseSig, field),
@@ -340,7 +349,7 @@ public class Anderson {
                             formalArgSig
                     );
                     /* a.f = b.f for each f in b's fields. */
-                    for(FieldAccess field: getAllFields(new Var[]{arg, formalArg}))
+                    for(JField field: getAllFields(new Var[]{arg, formalArg}))
                     {
                         AddEdge(
                                 GenSynthesizedFieldSignature(argSig, field),
@@ -383,7 +392,7 @@ public class Anderson {
                                 resultSig
                         );
                         /* a.f = b.f for each f in b's fields. */
-                        for(FieldAccess field: getAllFields(new Var[]{returnVar, resultVar}))
+                        for(JField field: getAllFields(new Var[]{returnVar, resultVar}))
                         {
                             AddEdge(
                                     GenSynthesizedFieldSignature(returnSig, field),
@@ -431,7 +440,7 @@ public class Anderson {
                         lhsSig
                 );
                 /* a.f = b.f for each f in b's fields. */
-                for(FieldAccess field: getAllFields(new Var[]{lhsVar, rhsVar}))
+                for(JField field: getAllFields(new Var[]{lhsVar, rhsVar}))
                 {
                     AddEdge(
                             GenSynthesizedFieldSignature(rhsSig, field),
@@ -462,8 +471,6 @@ public class Anderson {
                 Var lhsVar = lf_stmt.getLValue();
                 String lhsSig = GenMySignature(lhsVar, cur_clone_depth);
                 FieldAccess rhsField = lf_stmt.getRValue();
-                /* Add this field to record. */
-                all_existing_fields.put(rhsField.getFieldRef().resolve().getSignature(), rhsField);
 
                 /* a contains b.f */
                 AddEdge(
@@ -472,12 +479,12 @@ public class Anderson {
                 );
                 /* a.f = b.f, double edge */
                 AddEdge(
-                        GenSynthesizedFieldSignature(lhsSig, rhsField),
+                        GenSynthesizedFieldSignature(lhsSig, rhsField.getFieldRef().resolve()),
                         GenMySignature(rhsField, cur_clone_depth)
                 );
                 AddEdge(
                         GenMySignature(rhsField, cur_clone_depth),
-                        GenSynthesizedFieldSignature(lhsSig, rhsField)
+                        GenSynthesizedFieldSignature(lhsSig, rhsField.getFieldRef().resolve())
                 );
 
             } else if (statement instanceof StoreField sf_stmt){
@@ -496,8 +503,6 @@ public class Anderson {
                  * L value is a.f(FieldAccess), R value is b(Var)
                  */
                 FieldAccess lhsField = sf_stmt.getLValue();
-                /* Add this field to record. */
-                all_existing_fields.put(lhsField.getFieldRef().resolve().getSignature(), lhsField);
                 Var rhsVar = sf_stmt.getRValue();
                 String rhsSig = GenMySignature(rhsVar, cur_clone_depth);
                 /* a.f contains b */
@@ -508,10 +513,10 @@ public class Anderson {
                 /* a.f = b.f, double edge */
                 AddEdge(
                         GenMySignature(lhsField, cur_clone_depth),
-                        GenSynthesizedFieldSignature(rhsSig, lhsField)
+                        GenSynthesizedFieldSignature(rhsSig, lhsField.getFieldRef().resolve())
                 );
                 AddEdge(
-                        GenSynthesizedFieldSignature(rhsSig, lhsField),
+                        GenSynthesizedFieldSignature(rhsSig, lhsField.getFieldRef().resolve()),
                         GenMySignature(lhsField, cur_clone_depth)
                 );
             } else if (statement instanceof StoreArray sa_stmt){
@@ -537,8 +542,8 @@ public class Anderson {
      * @param vars Target Tai-e Vars
      * @return A Set containing the FieldAccess of each field of {@code var}.
      */
-    private Set<FieldAccess> getAllFields(Var[] vars) {
-        Set<FieldAccess> ans = new HashSet<>();
+    private Set<JField> getAllFields(Var[] vars) {
+        Set<JField> ans = new HashSet<>();
 //        for(StoreField sf_stmt: var.getStoreFields())
 //        {
 //            ans.add(sf_stmt.getFieldAccess());
@@ -547,19 +552,18 @@ public class Anderson {
 //        {
 //            ans.add(lf_stmt.getFieldAccess());
 //        }
-        for(FieldAccess field: all_existing_fields.values())
+        for(JField field: all_existing_fields.values())
         {
             ans.add(field);
             // @TODO: Add class filter to filter some impossible fields.
         }
         for(Var var: vars) {
-            System.out.println(
-                    GenMySignature(var, 114514));
+            System.out.println(GenMySignature(var, 114514)+"   and");
         }
-        System.out.println(" may have " + ans.size() + " active fields: ");
-        for(FieldAccess field: ans)
+        System.out.println("    may have " + ans.size() + " active fields: ");
+        for(JField field: ans)
         {
-            System.out.println("    "+GenMySignature(field, 114514));
+            System.out.println("        "+field.getSignature());
         }
         return ans;
     }
@@ -688,16 +692,16 @@ public class Anderson {
      * @param field The wanted field
      * @return The synthesized signature of the field access
      */
-    private String GenSynthesizedFieldSignature(String varSig, FieldAccess field)
+    private String GenSynthesizedFieldSignature(String varSig, JField field)
     {
-        String fieldSig = field.getFieldRef().resolve().getSignature();
-        if(field instanceof InstanceFieldAccess)
-        {
-            return varSig + fieldSig;
-        }
-        else // if(field instanceof StaticFieldAccess)
+        String fieldSig = field.getSignature();
+        if(field.isStatic())
         {
             return fieldSig;
+        }
+        else // Instance field
+        {
+            return varSig + fieldSig;
         }
     }
 
