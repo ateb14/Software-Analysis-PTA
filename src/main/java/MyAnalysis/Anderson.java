@@ -21,6 +21,7 @@ class NewConstraint {
 }
 
 public class Anderson {
+    private static final boolean DEBUG = true;
 
     private World world;
 
@@ -172,11 +173,14 @@ public class Anderson {
         while(!Jobs.isEmpty()){
             Propagate();
         }
-        //PrintPTS();
-//        for(String sig: method_counter_map.keySet())
-//        {
-//            System.out.println(sig+": clone cnt "+method_counter_map.get(sig));
-//        }
+        if(DEBUG)
+        {
+            PrintPTS();
+            for(String sig: method_counter_map.keySet())
+            {
+                System.out.println(sig+": clone cnt "+method_counter_map.get(sig));
+            }
+        }
     }
 
     /**
@@ -227,7 +231,13 @@ public class Anderson {
             for(JField jField: jClass.getDeclaredFields())
             {
                 /* Only fields defined in the benchmark program are desired. */
-                if(!jField.toString().contains("<benchmark")) continue;
+//                if(!jField.toString().contains("<benchmark")) continue;
+                boolean isLib = false;
+                for(CharSequence str: new CharSequence[]{"<java", "<com", "<sun", "<jdk"})
+                {
+                    if(jField.toString().contains(str)) {isLib = true; break;}
+                }
+                if(isLib) continue;
                 all_existing_fields.put(jField.getSignature(), jField);
             }
         }
@@ -235,22 +245,25 @@ public class Anderson {
         /* Initialize the constraints by method */
         InitConstraints(world.getMainMethod());
 
-//        System.out.println("NewConstraints:");
-//        for(NewConstraint newConstraint: newConstraintList){
-//            System.out.println(newConstraint.allocId + " " + newConstraint.to);
-//        }
-//        System.out.println("Queries:");
-//        for(Map.Entry<Integer, String> entry : queries.entrySet()){
-//            System.out.println(entry.getKey() + " " + entry.getValue());
-//        }
-//        System.out.println("Graph:");
-//        for(Map.Entry<String, TreeSet<String> > entry : graph.entrySet()){
-//            System.out.println(entry.getKey() + " flows to:");
-//            for(String to : entry.getValue()){
-//                System.out.println("    " + to);
-//            }
-//            System.out.print("\n");
-//        }
+        if(DEBUG)
+        {
+            System.out.println("NewConstraints:");
+            for (NewConstraint newConstraint : newConstraintList) {
+                System.out.println(newConstraint.allocId + " " + newConstraint.to);
+            }
+            System.out.println("Queries:");
+            for (Map.Entry<Integer, String> entry : queries.entrySet()) {
+                System.out.println(entry.getKey() + " " + entry.getValue());
+            }
+            System.out.println("Graph:");
+            for (Map.Entry<String, TreeSet<String>> entry : graph.entrySet()) {
+                System.out.println(entry.getKey() + " flows to:");
+                for (String to : entry.getValue()) {
+                    System.out.println("    " + to);
+                }
+                System.out.print("\n");
+            }
+        }
         InitJobs();
 
     }
@@ -283,7 +296,7 @@ public class Anderson {
                 JMethod newMethod = invoke_stmt.getMethodRef().resolve();
                 if (isLibrary(newMethod)) continue; // Important!!!!!!!!!!!!!!!!!!!!!!!!!
                 String signature = invoke_stmt.getMethodRef().toString();
-                //System.out.println("The invoked method is: "+signature);
+                if(DEBUG) System.out.println("The invoked method is: "+signature);
 
                 // These statements may throw exceptions if the argument is not a constant, handle them?
                 if (signature.equals("<benchmark.internal.Benchmark: void alloc(int)>") ||
@@ -347,8 +360,8 @@ public class Anderson {
                     Var formalArg = invoke_stmt.getInvokeExp().getMethodRef().resolve().getIR().getParam(arg_cnt);
                     String formalArgSig = FetchFormalArgSignature(arg_cnt, invoke_stmt); // Inside the function!
                     String argSig = GenMySignature(arg, cur_clone_depth);
-//                    System.out.println("Arg: "+argSig);
-//                    System.out.println("Formal Arg: "+formalArgSig);
+                    if(DEBUG) System.out.println("Arg: "+argSig);
+                    if(DEBUG) System.out.println("Formal Arg: "+formalArgSig);
                     AddEdge(
                             argSig,
                             formalArgSig
@@ -390,8 +403,8 @@ public class Anderson {
                         Var resultVar = invoke_stmt.getResult(); // Caller!
                         String resultSig = GenMySignature(resultVar, cur_clone_depth); // Caller!
                         String returnSig = FetchReturnSignature(i, invoke_stmt); // Callee!
-//                        System.out.println("Returned Var: "+returnSig);
-//                        System.out.println("Result Var: "+resultSig);
+                        if(DEBUG) System.out.println("Returned Var: "+returnSig);
+                        if(DEBUG) System.out.println("Result Var: "+resultSig);
                         AddEdge(
                                 returnSig,
                                 resultSig
@@ -562,14 +575,16 @@ public class Anderson {
             ans.add(field);
             // @TODO: Add class filter to filter some impossible fields.
         }
-//        for(Var var: vars) {
-//            System.out.println(GenMySignature(var, 114514)+"   and");
-//        }
-//        System.out.println("    may have " + ans.size() + " active fields: ");
-//        for(JField field: ans)
-//        {
-//            System.out.println("        "+field.getSignature());
-//        }
+        if(DEBUG)
+        {
+            for (Var var : vars) {
+                System.out.println(GenMySignature(var, 114514) + "   and");
+            }
+            System.out.println("    may have " + ans.size() + " active fields: ");
+            for (JField field : ans) {
+                System.out.println("        " + field.getSignature());
+            }
+        }
         return ans;
     }
 
