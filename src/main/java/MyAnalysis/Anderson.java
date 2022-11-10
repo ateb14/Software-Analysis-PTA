@@ -347,6 +347,8 @@ public class Anderson {
                     Var formalArg = invoke_stmt.getInvokeExp().getMethodRef().resolve().getIR().getParam(arg_cnt);
                     String formalArgSig = FetchFormalArgSignature(arg_cnt, invoke_stmt); // Inside the function!
                     String argSig = GenMySignature(arg, cur_clone_depth);
+                    System.out.println("Arg: "+argSig);
+                    System.out.println("Formal Arg: "+formalArgSig);
                     AddEdge(
                             argSig,
                             formalArgSig
@@ -741,8 +743,10 @@ public class Anderson {
         } else {
             depth = method_counter_map.get(method_sig);
         }
-        return depth + invoke.getInvokeExp().getMethodRef().resolve().getSignature() +
-                invoke.getMethodRef().resolve().getIR().getReturnVars().get(ret_cnt);
+        Var retVar = invoke.getMethodRef().resolve().getIR().getReturnVars().get(ret_cnt);
+//        return depth + invoke.getInvokeExp().getMethodRef().resolve().getSignature() +
+//                invoke.getMethodRef().resolve().getIR().getReturnVars().get(ret_cnt);
+        return GenMySignature(retVar, depth);
     }
 
     /**
@@ -764,7 +768,10 @@ public class Anderson {
                 depth = clone_depth;
             }
         }
-        return depth + invoke.getInvokeExp().getMethodRef().resolve().getSignature() +
-                invoke.getInvokeExp().getMethodRef().resolve().getIR().getParam(arg_cnt);
+        Var argVar = invoke.getInvokeExp().getMethodRef().resolve().getIR().getParam(arg_cnt);
+//        return depth + invoke.getInvokeExp().getMethodRef().resolve().getSignature() +
+//                invoke.getInvokeExp().getMethodRef().resolve().getIR().getParam(arg_cnt) +
+//                "(type=" + argVar.getType() + ")";
+        return GenMySignature(argVar, depth);
     }
 }
