@@ -223,8 +223,11 @@ public class Anderson {
         /* Record every field. */
         for(JClass jClass: world.getClassHierarchy().allClasses().toList())
         {
+//            if(jClass.toString().contains("<java") || jClass.toString().contains("<com")) continue;
             for(JField jField: jClass.getDeclaredFields())
             {
+                /* Only fields defined in the benchmark program are desired. */
+                if(!jField.toString().contains("<benchmark")) continue;
                 all_existing_fields.put(jField.getSignature(), jField);
             }
         }
@@ -653,11 +656,12 @@ public class Anderson {
      */
     public boolean isLibrary(JMethod method){
         String sig = method.getSignature();
-        if(sig.contains("<java.")){
+        if(sig.contains("<java.") || sig.contains("<com")){
             return true;
         }
         return false;
     }
+
 
     /**
      * Generate a signature, given an expression and its clone-depth
