@@ -484,15 +484,21 @@ public class Anderson {
              */
             for(JClass subClass: world.getClassHierarchy().getAllSubclassesOf(declaringClass))
             {
-                JMethod subMethod = subClass.getDeclaredMethod(invokedMethod.getName());
+                JMethod subMethod = subClass.getDeclaredMethod(invokedMethod.getSubsignature());
                 if(subMethod.isAbstract()) continue; // Skip abstract methods.
-                if(subMethod.getParamCount()!=invokedMethod.getParamCount()) continue; // Only want the overriding methods.
+                // if(subMethod.getParamCount()!=invokedMethod.getParamCount()) continue; // Only want the overriding methods.
                 DealWithNonAbstractInvokeStatement(subMethod, instExp.getBase(), instExp.getArgs(), resultVar, cur_clone_depth);
             }
         }
         else // instance of InvokeStatic
         {
-
+            DealWithNonAbstractInvokeStatement(
+                invoke_stmt.getInvokeExp().getMethodRef().resolve(),
+                    null,
+                    invoke_stmt.getInvokeExp().getArgs(),
+                    resultVar,
+                    cur_clone_depth
+            );
         }
 
 //        if(invoke_stmt.isInterface()){
@@ -543,35 +549,35 @@ public class Anderson {
     ){
         assert !method.isAbstract();
 
-        /**
-         * If this function belongs to a Var, then %this should be connected with this Var.
-         * (Important!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!)
-         * @// TODO: 2022/11/11  BUGGY FOR INTERFACE
-         */
-        Var this_ = method.getIR().getThis();
+        if(!method.isStatic()) {
+            /**
+             * If this function belongs to a Var, then %this should be connected with this Var.
+             * (Important!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!)
+             */
+            Var this_ = method.getIR().getThis();
 
-        String baseSig = GenMySignature(base, cur_clone_depth);
-        String thisSig = GenMySignature(this_, getNewInvokeCloneID(method));
+            String baseSig = GenMySignature(base, cur_clone_depth);
+            String thisSig = GenMySignature(this_, getNewInvokeCloneID(method));
 
-        AddEdge(
-                baseSig,
-                thisSig
-        );
+            AddEdge(
+                    baseSig,
+                    thisSig
+            );
 //                    AddEdge(
 //                            GenMySignature(this_, cur_clone_depth),
 //                            GenMySignature(base, cur_clone_depth)
 //                    );
-        for(JField field: getAllFields(new Var[]{base, this_}))
-        {
-            AddEdge(
-                    GenSynthesizedFieldSignature(baseSig, field),
-                    GenSynthesizedFieldSignature(thisSig, field)
-            );
-            AddEdge(
-                    GenSynthesizedFieldSignature(thisSig, field),
-                    GenSynthesizedFieldSignature(baseSig, field)
-            );
-            // Hopefully right!
+            for (JField field : getAllFields(new Var[]{base, this_})) {
+                AddEdge(
+                        GenSynthesizedFieldSignature(baseSig, field),
+                        GenSynthesizedFieldSignature(thisSig, field)
+                );
+                AddEdge(
+                        GenSynthesizedFieldSignature(thisSig, field),
+                        GenSynthesizedFieldSignature(baseSig, field)
+                );
+                // Hopefully right!
+            }
         }
         int arg_cnt = 0;
         for(Var arg : args){
