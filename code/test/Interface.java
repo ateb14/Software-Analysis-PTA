@@ -6,9 +6,9 @@ import benchmark.objects.*;
 public class Interface {
     public static void main(String [] args){
         BenchmarkN.alloc(1);
-        G g = new G();
+        I g = new G();
         BenchmarkN.alloc(2);
-        H h = new H();
+        I h = new H();
         BenchmarkN.alloc(3);
         A a1 = new A();
         BenchmarkN.alloc(4);
@@ -22,11 +22,11 @@ public class Interface {
         BenchmarkN.test(1, a3); // expect: 3
         BenchmarkN.test(2, a4); // expect: 4
         if(g instanceof G) {
-            G gg = g;
+            G gg = (G)g;
             BenchmarkN.test(3, gg.a); // expect: 3 4
         }
         if(h instanceof H) {
-            H hh = h;
+            H hh = (H)h;
             BenchmarkN.test(4, hh.a); // epxect: 4
         }
     }
