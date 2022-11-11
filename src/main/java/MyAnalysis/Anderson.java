@@ -316,13 +316,13 @@ public class Anderson {
                 if(DEBUG) System.out.println("The invoked method is: "+signature);
 
                 // These statements may throw exceptions if the argument is not a constant, handle them?
-                if (signature.equals("<benchmark.internal.Benchmark: void alloc(int)>") ||
-                        signature.equals("<benchmark.internal.BenchmarkN: void alloc(int)>")
+                if (signature.contains("<benchmark.internal.Benchmark: void alloc(int)>") ||
+                        signature.contains("<benchmark.internal.BenchmarkN: void alloc(int)>")
                 ){
                     allocId =  Integer.parseInt(invoke_stmt.getInvokeExp().getArg(0).getConstValue().toString());
                     continue;
-                } else if(signature.equals("<benchmark.internal.Benchmark: void test(int,java.lang.Object)>") ||
-                        signature.equals("<benchmark.internal.BenchmarkN: void test(int,java.lang.Object)>")
+                } else if(signature.contains("<benchmark.internal.Benchmark: void test(int,java.lang.Object)>") ||
+                        signature.contains("<benchmark.internal.BenchmarkN: void test(int,java.lang.Object)>")
                 ){
                     List<Var> args = invoke_stmt.getInvokeExp().getArgs();
                     queries.put(
@@ -472,78 +472,48 @@ public class Anderson {
      */
     private void DealWithInvokeStatement(Invoke invoke_stmt, int cur_clone_depth){
         Var resultVar = invoke_stmt.getLValue(); // May be null if return Var not received, but OK!
+        InvokeExp invokeExp = invoke_stmt.getInvokeExp();
+        Var base = null;
 
-        if(invoke_stmt.getInvokeExp() instanceof InvokeInstanceExp instExp)
+        if(invokeExp instanceof InvokeInstanceExp instExp)
         {
-            JMethod invokedMethod = instExp.getMethodRef().resolve();
-            if(DEBUG) System.out.println("Finding overriding methods of method "+invokedMethod.getSignature());
-            JClass declaringClass = instExp.getMethodRef().getDeclaringClass();
-
-            /* Deal with the method itself. In case all the subclasses have no overriding. */
-            DealWithNonAbstractInvokeStatement(invokedMethod, instExp.getBase(), instExp.getArgs(), resultVar, cur_clone_depth);
-            /**
-             * Should consider all the subclasses' methods, for:
-             * - not only may the invokedMethod be abstract,
-             * - but also may the invokedMethod be overridden by subclasses' methods.
-             */
-            for(JClass subClass: world.getClassHierarchy().getAllSubclassesOf(declaringClass))
-            {
-                if(subClass.toString()==declaringClass.toString()) continue;
-                // Better not deal with declaringClass twice!
-                /* Using SubSignature, I can find overriding methods. */
-                JMethod subMethod = subClass.getDeclaredMethod(invokedMethod.getSubsignature());
-                if(subMethod==null) continue; // The subClass did not override this method.
-                if(subMethod.isAbstract()) continue; // Skip abstract methods.
-                if(DEBUG) System.out.println("    finds: "+subMethod.getSignature());
-                // if(subMethod.getParamCount()!=invokedMethod.getParamCount()) continue; // Only want the overriding methods.
-                DealWithNonAbstractInvokeStatement(subMethod, instExp.getBase(), instExp.getArgs(), resultVar, cur_clone_depth);
-            }
-            if(DEBUG) System.out.println("Finding results end. ");
+            base = instExp.getBase();
         }
         else // instance of InvokeStatic
         {
-            DealWithNonAbstractInvokeStatement(
-                invoke_stmt.getInvokeExp().getMethodRef().resolve(),
-                    null,
-                    invoke_stmt.getInvokeExp().getArgs(),
-                    resultVar,
-                    cur_clone_depth
-            );
-        }
-
-//        if(invoke_stmt.isInterface()){
-//            // interface
-//            System.out.println(invoke_stmt);
-//            JClass base_interface = invoke_stmt.getMethodRef().getDeclaringClass();
-//            MethodRef methodRef = invoke_stmt.getMethodRef();
-//            for(JClass subclass : world.getClassHierarchy().getAllSubclassesOf(base_interface)){
-//                if(subclass == base_interface){
-//                    continue;
-//                }
-//                JMethod sub_method = subclass.getDeclaredMethod(methodRef.getName());
-//                if(sub_method == null){
-//                    System.out.println("NO!!!!!");
-//                    throw new RuntimeException();
-//                }
-//                DealWithNonAbstractInvokeStatement(
-//                        sub_method,
-//                        instanceExp.getBase(),
-//                        invoke_stmt.getInvokeExp().getArgs(),
-//                        ,
-//                        cur_clone_depth
-//                );
-//            }
-//
-//        } else{
-//            // virtual, special, static
 //            DealWithNonAbstractInvokeStatement(
-//                    instanceExp.getMethodRef().resolve(),
-//                    instanceExp.getBase(),
+//                invoke_stmt.getInvokeExp().getMethodRef().resolve(),
+//                    null,
 //                    invoke_stmt.getInvokeExp().getArgs(),
-//                    ,
+//                    resultVar,
 //                    cur_clone_depth
 //            );
-//        }
+        }
+
+        JMethod invokedMethod = invokeExp.getMethodRef().resolve();
+        if(DEBUG) System.out.println("Finding overriding methods of method "+invokedMethod.getSignature());
+        JClass declaringClass = invokeExp.getMethodRef().getDeclaringClass();
+
+        /* Deal with the method itself. In case all the subclasses have no overriding. */
+        DealWithNonAbstractInvokeStatement(invokedMethod, base, invokeExp.getArgs(), resultVar, cur_clone_depth);
+        /**
+         * Should consider all the subclasses' methods, for:
+         * - not only may the invokedMethod be abstract,
+         * - but also may the invokedMethod be overridden by subclasses' methods.
+         */
+        for(JClass subClass: world.getClassHierarchy().getAllSubclassesOf(declaringClass))
+        {
+            if(subClass.toString()==declaringClass.toString()) continue;
+            // Better not deal with declaringClass twice!
+            /* Using SubSignature, I can find overriding methods. */
+            JMethod subMethod = subClass.getDeclaredMethod(invokedMethod.getSubsignature());
+            if(subMethod==null) continue; // The subClass did not override this method.
+            if(subMethod.isAbstract()) continue; // Skip abstract methods.
+            if(DEBUG) System.out.println("    finds: "+subMethod.getSignature());
+            // if(subMethod.getParamCount()!=invokedMethod.getParamCount()) continue; // Only want the overriding methods.
+            DealWithNonAbstractInvokeStatement(subMethod, base, invokeExp.getArgs(), resultVar, cur_clone_depth);
+        }
+        if(DEBUG) System.out.println("Finding results end. ");
     }
 
     /**
@@ -558,6 +528,14 @@ public class Anderson {
             int cur_clone_depth
     ){
         assert !method.isAbstract();
+        if(DEBUG)
+        {
+            System.out.println("Dealing with invoked method: ");
+            System.out.println("    Sig: "+method.getSignature());
+            System.out.println("    base instance: "+GenMySignature(base, cur_clone_depth));
+            System.out.println("    result stored in: "+GenMySignature(resultVar, cur_clone_depth));
+            System.out.println("    isStatic: "+method.isStatic());
+        }
 
         if(!method.isStatic()) {
             /**
