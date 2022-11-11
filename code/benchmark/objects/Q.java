@@ -3,7 +3,9 @@ package benchmark.objects;
 public class Q {
 	// Class P extends class Q
 
-	private A a;
+	public A a;
+
+	public B qb;
 
 	public Q(A a) {
 		this.a = a;
