@@ -21,7 +21,7 @@ class NewConstraint {
 }
 
 public class Anderson {
-    private static final boolean DEBUG = false;
+    private static final boolean DEBUG = true;
 
     private World world;
 
@@ -476,6 +476,7 @@ public class Anderson {
         if(invoke_stmt.getInvokeExp() instanceof InvokeInstanceExp instExp)
         {
             JMethod invokedMethod = instExp.getMethodRef().resolve();
+            if(DEBUG) System.out.println("Finding overriding methods of method "+invokedMethod.getSignature());
             JClass declaringClass = instExp.getMethodRef().getDeclaringClass();
             /**
              * Should consider all the subclasses' methods, for:
@@ -484,8 +485,10 @@ public class Anderson {
              */
             for(JClass subClass: world.getClassHierarchy().getAllSubclassesOf(declaringClass))
             {
+                /* Using SubSignature, I can find overriding methods. */
                 JMethod subMethod = subClass.getDeclaredMethod(invokedMethod.getSubsignature());
                 if(subMethod.isAbstract()) continue; // Skip abstract methods.
+                if(DEBUG) System.out.println("    finds: "+subMethod.getSignature());
                 // if(subMethod.getParamCount()!=invokedMethod.getParamCount()) continue; // Only want the overriding methods.
                 DealWithNonAbstractInvokeStatement(subMethod, instExp.getBase(), instExp.getArgs(), resultVar, cur_clone_depth);
             }
