@@ -496,7 +496,8 @@ public class Anderson {
         JClass declaringClass = invokeExp.getMethodRef().getDeclaringClass();
 
         /* Deal with the method itself. In case all the subclasses have no overriding. */
-        DealWithNonAbstractInvokeStatement(invokedMethod, base, invokeExp.getArgs(), resultVar, cur_clone_depth);
+        if(!invokedMethod.isAbstract()) DealWithNonAbstractInvokeStatement(
+                invokedMethod, base, invokeExp.getArgs(), resultVar, cur_clone_depth);
         /**
          * Should consider all the subclasses' methods, for:
          * - not only may the invokedMethod be abstract,
