@@ -10,22 +10,22 @@ public class Derive {
         Benchmark.alloc(2);
         A a2 = new A();
         Benchmark.alloc(3);
-        P p1 = new P(a1);
+        Son son1 = new Son(a1);
         Benchmark.alloc(4);
-        P p2 = new P(a1);
+        Son son2 = new Son(a1);
 
-        p2.alias(a2);
+        son2.alias(a2);
 
         Benchmark.alloc(5);
         B b1 = new B();
 
-        Benchmark.test(1, p1.getA()); // expect: 1
+        Benchmark.test(1, son1.getA()); // expect: 1
 
-        Benchmark.test(2, p2.getA()); // expect: (1) 2
+        Benchmark.test(2, son2.getA()); // expect: (1) 2
 
 
-        Q p3 = new P(a1);
-        p3.qb = b1;
-        Benchmark.test(3, p3.qb); // expect 5
+        Father father3 = new Son(a1);
+        father3.qb = b1;
+        Benchmark.test(3, father3.qb); // expect 5
     }
 }

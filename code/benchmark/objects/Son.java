@@ -1,10 +1,10 @@
 package benchmark.objects;
 
-public class P extends Q {
+public class Son extends Father {
 
 	public B pb;
 
-	public P(A a) {
+	public Son(A a) {
 		super(a);
 	}
 }
