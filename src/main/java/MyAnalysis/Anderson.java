@@ -471,6 +471,7 @@ public class Anderson {
      * @param cur_clone_depth as it shows
      */
     private void DealWithInvokeStatement(Invoke invoke_stmt, int cur_clone_depth){
+        if(DEBUG) System.out.println("Dealing with statement "+invoke_stmt.toString());
         Var resultVar = invoke_stmt.getLValue(); // May be null if return Var not received, but OK!
         InvokeExp invokeExp = invoke_stmt.getInvokeExp();
         Var base = null;
@@ -503,6 +504,7 @@ public class Anderson {
          */
         for(JClass subClass: world.getClassHierarchy().getAllSubclassesOf(declaringClass))
         {
+            if(invokedMethod.getSignature().contains("void <init>")) break; // Brutally skip init functions.
             if(subClass.toString()==declaringClass.toString()) continue;
             // Better not deal with declaringClass twice!
             /* Using SubSignature, I can find overriding methods. */
@@ -510,7 +512,6 @@ public class Anderson {
             if(subMethod==null) continue; // The subClass did not override this method.
             if(subMethod.isAbstract()) continue; // Skip abstract methods.
             if(DEBUG) System.out.println("    finds: "+subMethod.getSignature());
-            // if(subMethod.getParamCount()!=invokedMethod.getParamCount()) continue; // Only want the overriding methods.
             DealWithNonAbstractInvokeStatement(subMethod, base, invokeExp.getArgs(), resultVar, cur_clone_depth);
         }
         if(DEBUG) System.out.println("Finding results end. ");
