@@ -478,6 +478,8 @@ public class Anderson {
             JMethod invokedMethod = instExp.getMethodRef().resolve();
             if(DEBUG) System.out.println("Finding overriding methods of method "+invokedMethod.getSignature());
             JClass declaringClass = instExp.getMethodRef().getDeclaringClass();
+            /* The method itself. In case all the subclasses have no overriding. */
+            DealWithNonAbstractInvokeStatement(invokedMethod, instExp.getBase(), instExp.getArgs(), resultVar, cur_clone_depth);
             /**
              * Should consider all the subclasses' methods, for:
              * - not only may the invokedMethod be abstract,
@@ -487,6 +489,7 @@ public class Anderson {
             {
                 /* Using SubSignature, I can find overriding methods. */
                 JMethod subMethod = subClass.getDeclaredMethod(invokedMethod.getSubsignature());
+                if(subMethod==null) continue; // The subClass did not override this method.
                 if(subMethod.isAbstract()) continue; // Skip abstract methods.
                 if(DEBUG) System.out.println("    finds: "+subMethod.getSignature());
                 // if(subMethod.getParamCount()!=invokedMethod.getParamCount()) continue; // Only want the overriding methods.
