@@ -1,6 +1,8 @@
 package MyAnalysis;
 
 import pascal.taie.World;
+import pascal.taie.config.Options;
+import pascal.taie.ir.proginfo.MethodRef;
 import pascal.taie.language.classes.*;
 import pascal.taie.ir.exp.*;
 import pascal.taie.ir.stmt.*;
@@ -21,7 +23,7 @@ class NewConstraint {
 }
 
 public class Anderson {
-    private static final boolean DEBUG = true;
+    private static final boolean DEBUG = false;
 
     private World world;
 
@@ -111,6 +113,11 @@ public class Anderson {
      */
     Map<String, TreeSet<Integer> > Jobs = new TreeMap<>();
 
+    /**
+     * Record all the classes that are declared
+     */
+    Set<String> class_set = new TreeSet<>();
+
 
     /**
      *  Solve the PTA
@@ -118,8 +125,8 @@ public class Anderson {
      */
     public void Solve(World world_){
         world = world_;
+        Initialize();
         try {
-            Initialize();
             Run();
         } catch (Exception e){
             Answer(true);
@@ -227,6 +234,17 @@ public class Anderson {
         /* Record every field. */
         for(JClass jClass: world.getClassHierarchy().allClasses().toList())
         {
+            String class_name = jClass.getName();
+            if(class_name.contains("com.") ||
+                    class_name.contains("sun.") ||
+                    class_name.contains("javax.") ||
+                    class_name.contains("java.") ||
+                    class_name.contains("org") ||
+                    class_name.contains("jdk")
+            ){
+                continue;
+            }
+            class_set.add(class_name);
 //            if(jClass.toString().contains("<java") || jClass.toString().contains("<com")) continue;
             for(JField jField: jClass.getDeclaredFields())
             {
@@ -278,9 +296,6 @@ public class Anderson {
             return;
         }
 
-        /**
-         * @// TODO: 2022/11/8 The function shouldn't return now, it has to propagate the objects in the cycle to this method
-         */
         if(DetectCycle(method)){
             return;
         }
@@ -291,6 +306,10 @@ public class Anderson {
         /* Traverse all the statements */
         List<Stmt> statements = method.getIR().getStmts();
         int allocId = 0;
+//        for(Stmt statement : statements) {
+//            System.out.println(statement);
+//        }
+//        System.out.println("###########");
         for(Stmt statement : statements){
             if (statement instanceof Invoke invoke_stmt){
                 JMethod newMethod = invoke_stmt.getMethodRef().resolve();
@@ -315,115 +334,9 @@ public class Anderson {
                     continue;
                 }
 
-                // Pass the arguments, returns and %this symbols
-                List<Var> args= invoke_stmt.getInvokeExp().getArgs();
-                /**
-                 * If this function belongs to a Var, then %this should be connected with this Var.
-                 * (Important!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!)
-                 */
-                if(invoke_stmt.getInvokeExp() instanceof InvokeInstanceExp instExp)
-                {
-                    Var base = instExp.getBase();
-                    Var this_ = instExp.getMethodRef().resolve().getIR().getThis();
-                    String baseSig = GenMySignature(base, cur_clone_depth);
-                    String thisSig = GenMySignature(this_, getNewInvokeCloneID(invoke_stmt));
-                    AddEdge(
-                            baseSig,
-                            thisSig
-                    );
-//                    AddEdge(
-//                            GenMySignature(this_, cur_clone_depth),
-//                            GenMySignature(base, cur_clone_depth)
-//                    );
-                    for(JField field: getAllFields(new Var[]{base, this_}))
-                    {
-                        AddEdge(
-                                GenSynthesizedFieldSignature(baseSig, field),
-                                GenSynthesizedFieldSignature(thisSig, field)
-                        );
-                        AddEdge(
-                                GenSynthesizedFieldSignature(thisSig, field),
-                                GenSynthesizedFieldSignature(baseSig, field)
-                        );
-                        // Hopefully right!
-                    }
-                }
-                int arg_cnt = 0;
-                for(Var arg : args){
-                    /**
-                     * Passed args are treated the same as copy statements:
-                     *  formalArg = arg;
-                     * which means:
-                     *  formalArg contains arg
-                     *  formalArg.f = arg.f, for each field f.
-                     */
-                    Var formalArg = invoke_stmt.getInvokeExp().getMethodRef().resolve().getIR().getParam(arg_cnt);
-                    String formalArgSig = FetchFormalArgSignature(arg_cnt, invoke_stmt); // Inside the function!
-                    String argSig = GenMySignature(arg, cur_clone_depth);
-                    if(DEBUG) System.out.println("Arg: "+argSig);
-                    if(DEBUG) System.out.println("Formal Arg: "+formalArgSig);
-                    AddEdge(
-                            argSig,
-                            formalArgSig
-                    );
-                    /* a.f = b.f for each f in b's fields. */
-                    for(JField field: getAllFields(new Var[]{arg, formalArg}))
-                    {
-                        AddEdge(
-                                GenSynthesizedFieldSignature(argSig, field),
-                                GenSynthesizedFieldSignature(formalArgSig, field)
-                        );
-                        AddEdge(
-                                GenSynthesizedFieldSignature(formalArgSig, field),
-                                GenSynthesizedFieldSignature(argSig, field)
-                        );
-                        // Hopefully right!
-                    }
-                    ++ arg_cnt;
-                }
+                // deal with the remaining invoke statements
+                InvokeStatement(invoke_stmt, cur_clone_depth);
 
-                // Recursively construct...
-                // it may throw an exception if the resolving process fails
-                InitConstraints(invoke_stmt.getInvokeExp().getMethodRef().resolve());
-
-
-                // receive the return value
-                // invoke -> var = InvokeExp
-                if(invoke_stmt.getLValue() != null){
-                    int ret_num = invoke_stmt.getInvokeExp().getMethodRef().resolve().getIR().getReturnVars().size();
-                    for(int i=0;i<ret_num;++i) {
-                        /**
-                         * Return values are treated the same as copy statements:
-                         *  result = retVal;
-                         * which means
-                         *  result contains retVal
-                         *  result.f = retVal.f, for each field f.
-                         */
-                        Var returnVar = invoke_stmt.getMethodRef().resolve().getIR().getReturnVars().get(i); // Callee!
-                        Var resultVar = invoke_stmt.getResult(); // Caller!
-                        String resultSig = GenMySignature(resultVar, cur_clone_depth); // Caller!
-                        String returnSig = FetchReturnSignature(i, invoke_stmt); // Callee!
-                        if(DEBUG) System.out.println("Returned Var: "+returnSig);
-                        if(DEBUG) System.out.println("Result Var: "+resultSig);
-                        AddEdge(
-                                returnSig,
-                                resultSig
-                        );
-                        /* a.f = b.f for each f in b's fields. */
-                        for(JField field: getAllFields(new Var[]{returnVar, resultVar}))
-                        {
-                            AddEdge(
-                                    GenSynthesizedFieldSignature(returnSig, field),
-                                    GenSynthesizedFieldSignature(resultSig, field)
-                            );
-                            AddEdge(
-                                    GenSynthesizedFieldSignature(resultSig, field),
-                                    GenSynthesizedFieldSignature(returnSig, field)
-                            );
-                            // Hopefully right!
-                        }
-                    }
-                }
             } else if (statement instanceof New new_stmt) {
                 if(allocId == 0) continue;
                 /*
@@ -552,6 +465,161 @@ public class Anderson {
             }
         }
         Traceback(method);
+    }
+
+    /**
+     * Deal with an invoke statement
+     * @param invoke_stmt an arbitrary invoke statement
+     * @param cur_clone_depth as it shows
+     */
+    private void InvokeStatement(Invoke invoke_stmt, int cur_clone_depth){
+        if(invoke_stmt.isInterface()){
+            // interface
+            System.out.println(invoke_stmt);
+            JClass base_interface = invoke_stmt.getMethodRef().getDeclaringClass();
+            MethodRef methodRef = invoke_stmt.getMethodRef();
+            for(JClass subclass : world.getClassHierarchy().getAllSubclassesOf(base_interface)){
+                if(subclass == base_interface){
+                    continue;
+                }
+                System.out.println(subclass.getDeclaredMethod(methodRef.getName()));
+            }
+
+        } else{
+            // virtual, special, static
+            InvokeInstanceExp instanceExp = (InvokeInstanceExp) invoke_stmt.getInvokeExp();
+            Optional<Var> ret_var = Optional.empty();
+            if(invoke_stmt.getLValue() != null){
+                ret_var = Optional.ofNullable(invoke_stmt.getLValue());
+            }
+            CertainInvokeStatement(
+                    instanceExp.getMethodRef().resolve(),
+                    instanceExp.getBase(),
+                    invoke_stmt.getInvokeExp().getArgs(),
+                    ret_var,
+                    cur_clone_depth
+            );
+        }
+    }
+
+    /**
+     *  Deal with the CERTAIN invoke statements, i.e. it's not abstract
+     * @param cur_clone_depth as it shows
+     */
+    private void CertainInvokeStatement(
+            JMethod method,
+            Var base,
+            List<Var> args ,
+            Optional<Var> resultVar,
+            int cur_clone_depth
+    ){
+
+        /**
+         * If this function belongs to a Var, then %this should be connected with this Var.
+         * (Important!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!)
+         * @// TODO: 2022/11/11  BUGGY FOR INTERFACE
+         */
+        Var this_ = method.getIR().getThis();
+
+        String baseSig = GenMySignature(base, cur_clone_depth);
+        String thisSig = GenMySignature(this_, getNewInvokeCloneID(method));
+
+        AddEdge(
+                baseSig,
+                thisSig
+        );
+//                    AddEdge(
+//                            GenMySignature(this_, cur_clone_depth),
+//                            GenMySignature(base, cur_clone_depth)
+//                    );
+        for(JField field: getAllFields(new Var[]{base, this_}))
+        {
+            AddEdge(
+                    GenSynthesizedFieldSignature(baseSig, field),
+                    GenSynthesizedFieldSignature(thisSig, field)
+            );
+            AddEdge(
+                    GenSynthesizedFieldSignature(thisSig, field),
+                    GenSynthesizedFieldSignature(baseSig, field)
+            );
+            // Hopefully right!
+        }
+        int arg_cnt = 0;
+        for(Var arg : args){
+            /**
+             * Passed args are treated the same as copy statements:
+             *  formalArg = arg;
+             * which means:
+             *  formalArg contains arg
+             *  formalArg.f = arg.f, for each field f.
+             */
+            Var formalArg = method.getIR().getParam(arg_cnt);
+            String formalArgSig = FetchFormalArgSignature(arg_cnt, method); // Inside the function!
+            String argSig = GenMySignature(arg, cur_clone_depth);
+            if(DEBUG) System.out.println("Arg: "+argSig);
+            if(DEBUG) System.out.println("Formal Arg: "+formalArgSig);
+            AddEdge(
+                    argSig,
+                    formalArgSig
+            );
+            /* a.f = b.f for each f in b's fields. */
+            for(JField field: getAllFields(new Var[]{arg, formalArg}))
+            {
+                AddEdge(
+                        GenSynthesizedFieldSignature(argSig, field),
+                        GenSynthesizedFieldSignature(formalArgSig, field)
+                );
+                AddEdge(
+                        GenSynthesizedFieldSignature(formalArgSig, field),
+                        GenSynthesizedFieldSignature(argSig, field)
+                );
+                // Hopefully right!
+            }
+            ++ arg_cnt;
+        }
+
+        // Recursively construct...
+        // it may throw an exception if the resolving process fails
+        InitConstraints(method);
+
+
+        // receive the return value
+        // invoke -> var = InvokeExp
+        if(resultVar.isPresent()){
+            int ret_num = method.getIR().getReturnVars().size();
+            for(int i=0;i<ret_num;++i) {
+                /**
+                 * Return values are treated the same as copy statements:
+                 *  result = retVal;
+                 * which means
+                 *  result contains retVal
+                 *  result.f = retVal.f, for each field f.
+                 */
+                Var returnVar = method.getIR().getReturnVars().get(i); // Callee!
+                //Var resultVar = invoke_stmt.getResult(); // Caller!
+                String resultSig = GenMySignature(resultVar.get(), cur_clone_depth); // Caller!
+                String returnSig = FetchReturnSignature(i, method); // Callee!
+                if(DEBUG) System.out.println("Returned Var: "+returnSig);
+                if(DEBUG) System.out.println("Result Var: "+resultSig);
+                AddEdge(
+                        returnSig,
+                        resultSig
+                );
+                /* a.f = b.f for each f in b's fields. */
+                for(JField field: getAllFields(new Var[]{returnVar, resultVar.get()}))
+                {
+                    AddEdge(
+                            GenSynthesizedFieldSignature(returnSig, field),
+                            GenSynthesizedFieldSignature(resultSig, field)
+                    );
+                    AddEdge(
+                            GenSynthesizedFieldSignature(resultSig, field),
+                            GenSynthesizedFieldSignature(returnSig, field)
+                    );
+                    // Hopefully right!
+                }
+            }
+        }
     }
 
     /**
@@ -726,10 +794,15 @@ public class Anderson {
         }
     }
 
-    private int getNewInvokeCloneID(Invoke invoke)
+    /**
+     * Gen
+     * @param method the given method
+     * @return the future clone id of the upcoming method
+     */
+    private int getNewInvokeCloneID(JMethod method)
     {
         int depth;
-        String method_sig = invoke.getMethodRef().resolve().getSignature();
+        String method_sig = method.getSignature();
         if(!method_counter_map.containsKey(method_sig)){ // not cloned yet
             depth = 1;
         } else{
@@ -744,21 +817,21 @@ public class Anderson {
     }
 
     /**
-     * Generate a signature of the return value of the given invoke statement
-     * @param ret_cnt the number of the return value(always 0 ?)
-     * @param invoke the invoke statement
+     * Generate a signature of the return value of a given method
+     * @param ret_cnt the number of the return value
+     * @param method the given method
      * @return the signature
      */
-    private String FetchReturnSignature(int ret_cnt, Invoke invoke){
+    private String FetchReturnSignature(int ret_cnt, JMethod method){
         int depth;
-        String method_sig = invoke.getMethodRef().resolve().getSignature();
+        String method_sig = method.getSignature();
         if(!method_counter_map.containsKey(method_sig)){ // not cloned yet
             // normally this won't happen
             throw new RuntimeException();
         } else {
             depth = method_counter_map.get(method_sig);
         }
-        Var retVar = invoke.getMethodRef().resolve().getIR().getReturnVars().get(ret_cnt);
+        Var retVar = method.getIR().getReturnVars().get(ret_cnt);
 //        return depth + invoke.getInvokeExp().getMethodRef().resolve().getSignature() +
 //                invoke.getMethodRef().resolve().getIR().getReturnVars().get(ret_cnt);
         return GenMySignature(retVar, depth);
@@ -767,12 +840,12 @@ public class Anderson {
     /**
      * Generate a signature of a formal argument of a method
      * @param arg_cnt the number of the formal argument
-     * @param invoke the invoke statement
+     * @param method the given method
      * @return the signature
      */
-    private String FetchFormalArgSignature(int arg_cnt, Invoke invoke){
+    private String FetchFormalArgSignature(int arg_cnt, JMethod method){
         int depth;
-        String method_sig = invoke.getMethodRef().resolve().getSignature();
+        String method_sig = method.getSignature();
         if(!method_counter_map.containsKey(method_sig)){ // not cloned yet
             depth = 1;
         } else{
@@ -783,7 +856,7 @@ public class Anderson {
                 depth = clone_depth;
             }
         }
-        Var argVar = invoke.getInvokeExp().getMethodRef().resolve().getIR().getParam(arg_cnt);
+        Var argVar = method.getIR().getParam(arg_cnt);
 //        return depth + invoke.getInvokeExp().getMethodRef().resolve().getSignature() +
 //                invoke.getInvokeExp().getMethodRef().resolve().getIR().getParam(arg_cnt) +
 //                "(type=" + argVar.getType() + ")";

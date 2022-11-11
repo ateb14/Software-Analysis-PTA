@@ -26,6 +26,22 @@ public class Recursion{
         return cycle_1(a1, a2, a3, cnt-1);
     }
 
+    public static A cycle_with_val1(int cnt){
+        if(cnt <= 0 ){
+            Benchmark.alloc(4);
+            return new A();
+        }
+        return cycle_with_val2(cnt - 1);
+    }
+
+    public static A cycle_with_val2(int cnt){
+        if(cnt <= 0 ){
+            Benchmark.alloc(5);
+            return new A();
+        }
+        return cycle_with_val1(cnt - 1);
+    }
+
     public static A recursive_func(A a1, A a2, int cnt){
         if(cnt > 100){
             return a2;
@@ -47,7 +63,12 @@ public class Recursion{
 
         A aa = recursive_func(a1,a2,10);
         A aaa = cycle_1(a1, a2, a3,10);
+
+        A a4 = cycle_with_val1(10);
+
         Benchmark.test(1, aa);
         Benchmark.test(2, aaa);
+        Benchmark.test(3, a4);
+
     }
 }
