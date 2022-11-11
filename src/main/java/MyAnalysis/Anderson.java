@@ -45,7 +45,7 @@ public class Anderson {
      *  These are the necessary components for clone-based inter-procedural analysis.
      */
     private Map<String, Integer> method_counter_map = new TreeMap<>();
-    public final int clone_depth = 30;
+    public final int clone_depth = 999;
 
     /**
      * This map is used to detect the cycles in the call graph.
@@ -478,7 +478,8 @@ public class Anderson {
             JMethod invokedMethod = instExp.getMethodRef().resolve();
             if(DEBUG) System.out.println("Finding overriding methods of method "+invokedMethod.getSignature());
             JClass declaringClass = instExp.getMethodRef().getDeclaringClass();
-            /* The method itself. In case all the subclasses have no overriding. */
+
+            /* Deal with the method itself. In case all the subclasses have no overriding. */
             DealWithNonAbstractInvokeStatement(invokedMethod, instExp.getBase(), instExp.getArgs(), resultVar, cur_clone_depth);
             /**
              * Should consider all the subclasses' methods, for:
@@ -495,6 +496,7 @@ public class Anderson {
                 // if(subMethod.getParamCount()!=invokedMethod.getParamCount()) continue; // Only want the overriding methods.
                 DealWithNonAbstractInvokeStatement(subMethod, instExp.getBase(), instExp.getArgs(), resultVar, cur_clone_depth);
             }
+            if(DEBUG) System.out.println("Finding results end. ");
         }
         else // instance of InvokeStatic
         {
