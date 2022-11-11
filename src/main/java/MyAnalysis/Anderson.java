@@ -1,8 +1,6 @@
 package MyAnalysis;
 
 import pascal.taie.World;
-import pascal.taie.config.Options;
-import pascal.taie.ir.proginfo.MethodRef;
 import pascal.taie.language.classes.*;
 import pascal.taie.ir.exp.*;
 import pascal.taie.ir.stmt.*;
@@ -335,7 +333,7 @@ public class Anderson {
                 }
 
                 // deal with the remaining invoke statements
-                InvokeStatement(invoke_stmt, cur_clone_depth);
+                DealWithInvokeStatement(invoke_stmt, cur_clone_depth);
 
             } else if (statement instanceof New new_stmt) {
                 if(allocId == 0) continue;
@@ -472,59 +470,78 @@ public class Anderson {
      * @param invoke_stmt an arbitrary invoke statement
      * @param cur_clone_depth as it shows
      */
-    private void InvokeStatement(Invoke invoke_stmt, int cur_clone_depth){
-        InvokeInstanceExp instanceExp = (InvokeInstanceExp) invoke_stmt.getInvokeExp();
-        Optional<Var> ret_var = Optional.empty();
+    private void DealWithInvokeStatement(Invoke invoke_stmt, int cur_clone_depth){
+        Var resultVar = invoke_stmt.getLValue(); // May be null if return Var not received, but OK!
 
-        if(invoke_stmt.getLValue() != null){
-            ret_var = Optional.ofNullable(invoke_stmt.getLValue());
-        }
-        if(invoke_stmt.isInterface()){
-            // interface
-            System.out.println(invoke_stmt);
-            JClass base_interface = invoke_stmt.getMethodRef().getDeclaringClass();
-            MethodRef methodRef = invoke_stmt.getMethodRef();
-            for(JClass subclass : world.getClassHierarchy().getAllSubclassesOf(base_interface)){
-                if(subclass == base_interface){
-                    continue;
-                }
-                JMethod sub_method = subclass.getDeclaredMethod(methodRef.getName());
-                if(sub_method == null){
-                    System.out.println("NO!!!!!");
-                    throw new RuntimeException();
-                }
-                CertainInvokeStatement(
-                        sub_method,
-                        instanceExp.getBase(),
-                        invoke_stmt.getInvokeExp().getArgs(),
-                        ret_var,
-                        cur_clone_depth
-                );
+        if(invoke_stmt.getInvokeExp() instanceof InvokeInstanceExp instExp)
+        {
+            JMethod invokedMethod = instExp.getMethodRef().resolve();
+            JClass declaringClass = instExp.getMethodRef().getDeclaringClass();
+            /**
+             * Should consider all the subclasses' methods, for:
+             * - not only may the invokedMethod be abstract,
+             * - but also may the invokedMethod be overridden by subclasses' methods.
+             */
+            for(JClass subClass: world.getClassHierarchy().getAllSubclassesOf(declaringClass))
+            {
+                JMethod subMethod = subClass.getDeclaredMethod(invokedMethod.getName());
+                if(subMethod.isAbstract()) continue; // Skip abstract methods.
+                if(subMethod.getParamCount()!=invokedMethod.getParamCount()) continue; // Only want the overriding methods.
+                DealWithNonAbstractInvokeStatement(subMethod, instExp.getBase(), instExp.getArgs(), resultVar, cur_clone_depth);
             }
-
-        } else{
-            // virtual, special, static
-            CertainInvokeStatement(
-                    instanceExp.getMethodRef().resolve(),
-                    instanceExp.getBase(),
-                    invoke_stmt.getInvokeExp().getArgs(),
-                    ret_var,
-                    cur_clone_depth
-            );
         }
+        else // instance of InvokeStatic
+        {
+
+        }
+
+//        if(invoke_stmt.isInterface()){
+//            // interface
+//            System.out.println(invoke_stmt);
+//            JClass base_interface = invoke_stmt.getMethodRef().getDeclaringClass();
+//            MethodRef methodRef = invoke_stmt.getMethodRef();
+//            for(JClass subclass : world.getClassHierarchy().getAllSubclassesOf(base_interface)){
+//                if(subclass == base_interface){
+//                    continue;
+//                }
+//                JMethod sub_method = subclass.getDeclaredMethod(methodRef.getName());
+//                if(sub_method == null){
+//                    System.out.println("NO!!!!!");
+//                    throw new RuntimeException();
+//                }
+//                DealWithNonAbstractInvokeStatement(
+//                        sub_method,
+//                        instanceExp.getBase(),
+//                        invoke_stmt.getInvokeExp().getArgs(),
+//                        ,
+//                        cur_clone_depth
+//                );
+//            }
+//
+//        } else{
+//            // virtual, special, static
+//            DealWithNonAbstractInvokeStatement(
+//                    instanceExp.getMethodRef().resolve(),
+//                    instanceExp.getBase(),
+//                    invoke_stmt.getInvokeExp().getArgs(),
+//                    ,
+//                    cur_clone_depth
+//            );
+//        }
     }
 
     /**
      *  Deal with the CERTAIN invoke statements, i.e. it's not abstract
      * @param cur_clone_depth as it shows
      */
-    private void CertainInvokeStatement(
+    private void DealWithNonAbstractInvokeStatement(
             JMethod method,
             Var base,
             List<Var> args ,
-            Optional<Var> resultVar,
+            Var resultVar,
             int cur_clone_depth
     ){
+        assert !method.isAbstract();
 
         /**
          * If this function belongs to a Var, then %this should be connected with this Var.
@@ -597,7 +614,7 @@ public class Anderson {
 
         // receive the return value
         // invoke -> var = InvokeExp
-        if(resultVar.isPresent()){
+        if(resultVar!=null){
             int ret_num = method.getIR().getReturnVars().size();
             for(int i=0;i<ret_num;++i) {
                 /**
@@ -609,7 +626,7 @@ public class Anderson {
                  */
                 Var returnVar = method.getIR().getReturnVars().get(i); // Callee!
                 //Var resultVar = invoke_stmt.getResult(); // Caller!
-                String resultSig = GenMySignature(resultVar.get(), cur_clone_depth); // Caller!
+                String resultSig = GenMySignature(resultVar, cur_clone_depth); // Caller!
                 String returnSig = FetchReturnSignature(i, method); // Callee!
                 if(DEBUG) System.out.println("Returned Var: "+returnSig);
                 if(DEBUG) System.out.println("Result Var: "+resultSig);
@@ -618,7 +635,7 @@ public class Anderson {
                         resultSig
                 );
                 /* a.f = b.f for each f in b's fields. */
-                for(JField field: getAllFields(new Var[]{returnVar, resultVar.get()}))
+                for(JField field: getAllFields(new Var[]{returnVar, resultVar}))
                 {
                     AddEdge(
                             GenSynthesizedFieldSignature(returnSig, field),
