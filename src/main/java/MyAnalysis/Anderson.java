@@ -473,6 +473,12 @@ public class Anderson {
      * @param cur_clone_depth as it shows
      */
     private void InvokeStatement(Invoke invoke_stmt, int cur_clone_depth){
+        InvokeInstanceExp instanceExp = (InvokeInstanceExp) invoke_stmt.getInvokeExp();
+        Optional<Var> ret_var = Optional.empty();
+
+        if(invoke_stmt.getLValue() != null){
+            ret_var = Optional.ofNullable(invoke_stmt.getLValue());
+        }
         if(invoke_stmt.isInterface()){
             // interface
             System.out.println(invoke_stmt);
@@ -482,16 +488,22 @@ public class Anderson {
                 if(subclass == base_interface){
                     continue;
                 }
-                System.out.println(subclass.getDeclaredMethod(methodRef.getName()));
+                JMethod sub_method = subclass.getDeclaredMethod(methodRef.getName());
+                if(sub_method == null){
+                    System.out.println("NO!!!!!");
+                    throw new RuntimeException();
+                }
+                CertainInvokeStatement(
+                        sub_method,
+                        instanceExp.getBase(),
+                        invoke_stmt.getInvokeExp().getArgs(),
+                        ret_var,
+                        cur_clone_depth
+                );
             }
 
         } else{
             // virtual, special, static
-            InvokeInstanceExp instanceExp = (InvokeInstanceExp) invoke_stmt.getInvokeExp();
-            Optional<Var> ret_var = Optional.empty();
-            if(invoke_stmt.getLValue() != null){
-                ret_var = Optional.ofNullable(invoke_stmt.getLValue());
-            }
             CertainInvokeStatement(
                     instanceExp.getMethodRef().resolve(),
                     instanceExp.getBase(),
