@@ -488,6 +488,8 @@ public class Anderson {
              */
             for(JClass subClass: world.getClassHierarchy().getAllSubclassesOf(declaringClass))
             {
+                if(subClass.toString()==declaringClass.toString()) continue;
+                // Better not deal with declaringClass twice!
                 /* Using SubSignature, I can find overriding methods. */
                 JMethod subMethod = subClass.getDeclaredMethod(invokedMethod.getSubsignature());
                 if(subMethod==null) continue; // The subClass did not override this method.
