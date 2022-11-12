@@ -21,7 +21,7 @@ class NewConstraint {
 }
 
 public class Anderson {
-    private static final boolean DEBUG = true;
+    private static final boolean DEBUG = false;
 
     private World world;
 
@@ -349,6 +349,24 @@ public class Anderson {
                 AddEdge(Integer.toString(allocId), GenMySignature(new_stmt.getLValue(),cur_clone_depth));
                 all_allocIds.add(allocId);
                 allocId = 0; // No need? There may be many new() statements in an init() function.
+            } else if (statement instanceof Cast cast_stmt){
+                Var lhsVar = cast_stmt.getLValue();
+                CastExp castExp = cast_stmt.getRValue();
+                Var rhsVar = castExp.getValue();
+                String lhsSig = GenMySignature(lhsVar, cur_clone_depth);
+                String rhsSig = GenMySignature(rhsVar, cur_clone_depth);
+                AddEdge(rhsSig, lhsSig);
+                for(JField field: getAllFields(new Var[]{lhsVar, rhsVar}))
+                {
+                    AddEdge(
+                            GenSynthesizedFieldSignature(rhsSig, field),
+                            GenSynthesizedFieldSignature(lhsSig, field)
+                    );
+                    AddEdge(
+                            GenSynthesizedFieldSignature(lhsSig, field),
+                            GenSynthesizedFieldSignature(rhsSig, field)
+                    );
+                }
             } else if (statement instanceof Copy copy_stmt){
                 /**
                  * Copy -> Var = Var;
