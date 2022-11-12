@@ -1,8 +1,6 @@
 package MyAnalysis;
 
 import pascal.taie.World;
-import pascal.taie.config.Options;
-import pascal.taie.ir.proginfo.MethodRef;
 import pascal.taie.language.classes.*;
 import pascal.taie.ir.exp.*;
 import pascal.taie.ir.stmt.*;
@@ -47,7 +45,7 @@ public class Anderson {
      *  These are the necessary components for clone-based inter-procedural analysis.
      */
     private Map<String, Integer> method_counter_map = new TreeMap<>();
-    public final int clone_depth = 30;
+    public final int clone_depth = 999;
 
     /**
      * This map is used to detect the cycles in the call graph.
@@ -318,13 +316,13 @@ public class Anderson {
                 if(DEBUG) System.out.println("The invoked method is: "+signature);
 
                 // These statements may throw exceptions if the argument is not a constant, handle them?
-                if (signature.equals("<benchmark.internal.Benchmark: void alloc(int)>") ||
-                        signature.equals("<benchmark.internal.BenchmarkN: void alloc(int)>")
+                if (signature.contains("<benchmark.internal.Benchmark: void alloc(int)>") ||
+                        signature.contains("<benchmark.internal.BenchmarkN: void alloc(int)>")
                 ){
                     allocId =  Integer.parseInt(invoke_stmt.getInvokeExp().getArg(0).getConstValue().toString());
                     continue;
-                } else if(signature.equals("<benchmark.internal.Benchmark: void test(int,java.lang.Object)>") ||
-                        signature.equals("<benchmark.internal.BenchmarkN: void test(int,java.lang.Object)>")
+                } else if(signature.contains("<benchmark.internal.Benchmark: void test(int,java.lang.Object)>") ||
+                        signature.contains("<benchmark.internal.BenchmarkN: void test(int,java.lang.Object)>")
                 ){
                     List<Var> args = invoke_stmt.getInvokeExp().getArgs();
                     queries.put(
@@ -335,7 +333,7 @@ public class Anderson {
                 }
 
                 // deal with the remaining invoke statements
-                InvokeStatement(invoke_stmt, cur_clone_depth);
+                DealWithInvokeStatement(invoke_stmt, cur_clone_depth);
 
             } else if (statement instanceof New new_stmt) {
                 if(allocId == 0) continue;
@@ -351,6 +349,24 @@ public class Anderson {
                 AddEdge(Integer.toString(allocId), GenMySignature(new_stmt.getLValue(),cur_clone_depth));
                 all_allocIds.add(allocId);
                 allocId = 0; // No need? There may be many new() statements in an init() function.
+            } else if (statement instanceof Cast cast_stmt){
+                Var lhsVar = cast_stmt.getLValue();
+                CastExp castExp = cast_stmt.getRValue();
+                Var rhsVar = castExp.getValue();
+                String lhsSig = GenMySignature(lhsVar, cur_clone_depth);
+                String rhsSig = GenMySignature(rhsVar, cur_clone_depth);
+                AddEdge(rhsSig, lhsSig);
+                for(JField field: getAllFields(new Var[]{lhsVar, rhsVar}))
+                {
+                    AddEdge(
+                            GenSynthesizedFieldSignature(rhsSig, field),
+                            GenSynthesizedFieldSignature(lhsSig, field)
+                    );
+                    AddEdge(
+                            GenSynthesizedFieldSignature(lhsSig, field),
+                            GenSynthesizedFieldSignature(rhsSig, field)
+                    );
+                }
             } else if (statement instanceof Copy copy_stmt){
                 /**
                  * Copy -> Var = Var;
@@ -472,89 +488,104 @@ public class Anderson {
      * @param invoke_stmt an arbitrary invoke statement
      * @param cur_clone_depth as it shows
      */
-    private void InvokeStatement(Invoke invoke_stmt, int cur_clone_depth){
-        InvokeInstanceExp instanceExp = (InvokeInstanceExp) invoke_stmt.getInvokeExp();
-        Optional<Var> ret_var = Optional.empty();
+    private void DealWithInvokeStatement(Invoke invoke_stmt, int cur_clone_depth){
+        if(DEBUG) System.out.println("Dealing with statement "+invoke_stmt.toString());
+        Var resultVar = invoke_stmt.getLValue(); // May be null if return Var not received, but OK!
+        InvokeExp invokeExp = invoke_stmt.getInvokeExp();
+        Var base = null;
 
-        if(invoke_stmt.getLValue() != null){
-            ret_var = Optional.ofNullable(invoke_stmt.getLValue());
+        if(invokeExp instanceof InvokeInstanceExp instExp)
+        {
+            base = instExp.getBase();
         }
-        if(invoke_stmt.isInterface()){
-            // interface
-            System.out.println(invoke_stmt);
-            JClass base_interface = invoke_stmt.getMethodRef().getDeclaringClass();
-            MethodRef methodRef = invoke_stmt.getMethodRef();
-            for(JClass subclass : world.getClassHierarchy().getAllSubclassesOf(base_interface)){
-                if(subclass == base_interface){
-                    continue;
-                }
-                JMethod sub_method = subclass.getDeclaredMethod(methodRef.getName());
-                if(sub_method == null){
-                    System.out.println("NO!!!!!");
-                    throw new RuntimeException();
-                }
-                CertainInvokeStatement(
-                        sub_method,
-                        instanceExp.getBase(),
-                        invoke_stmt.getInvokeExp().getArgs(),
-                        ret_var,
-                        cur_clone_depth
-                );
-            }
+        else // instance of InvokeStatic
+        {
+//            DealWithNonAbstractInvokeStatement(
+//                invoke_stmt.getInvokeExp().getMethodRef().resolve(),
+//                    null,
+//                    invoke_stmt.getInvokeExp().getArgs(),
+//                    resultVar,
+//                    cur_clone_depth
+//            );
+        }
 
-        } else{
-            // virtual, special, static
-            CertainInvokeStatement(
-                    instanceExp.getMethodRef().resolve(),
-                    instanceExp.getBase(),
-                    invoke_stmt.getInvokeExp().getArgs(),
-                    ret_var,
-                    cur_clone_depth
-            );
+        JMethod invokedMethod = invokeExp.getMethodRef().resolve();
+        if(DEBUG) System.out.println("Finding overriding methods of method "+invokedMethod.getSignature());
+        JClass declaringClass = invokeExp.getMethodRef().getDeclaringClass();
+
+        /* Deal with the method itself. In case all the subclasses have no overriding. */
+        if(!invokedMethod.isAbstract()) DealWithNonAbstractInvokeStatement(
+                invokedMethod, base, invokeExp.getArgs(), resultVar, cur_clone_depth);
+        /**
+         * Should consider all the subclasses' methods, for:
+         * - not only may the invokedMethod be abstract,
+         * - but also may the invokedMethod be overridden by subclasses' methods.
+         */
+        for(JClass subClass: world.getClassHierarchy().getAllSubclassesOf(declaringClass))
+        {
+            if(invokedMethod.getSignature().contains("void <init>")) break; // Brutally skip init functions.
+            if(subClass.toString()==declaringClass.toString()) continue;
+            // Better not deal with declaringClass twice!
+            /* Using SubSignature, I can find overriding methods. */
+            JMethod subMethod = subClass.getDeclaredMethod(invokedMethod.getSubsignature());
+            if(subMethod==null) continue; // The subClass did not override this method.
+            if(subMethod.isAbstract()) continue; // Skip abstract methods.
+            if(DEBUG) System.out.println("    finds: "+subMethod.getSignature());
+            DealWithNonAbstractInvokeStatement(subMethod, base, invokeExp.getArgs(), resultVar, cur_clone_depth);
         }
+        if(DEBUG) System.out.println("Finding results end. ");
     }
 
     /**
      *  Deal with the CERTAIN invoke statements, i.e. it's not abstract
      * @param cur_clone_depth as it shows
      */
-    private void CertainInvokeStatement(
+    private void DealWithNonAbstractInvokeStatement(
             JMethod method,
             Var base,
             List<Var> args ,
-            Optional<Var> resultVar,
+            Var resultVar,
             int cur_clone_depth
     ){
+        assert !method.isAbstract();
+        if(DEBUG)
+        {
+            System.out.println("Dealing with invoked method: ");
+            System.out.println("    Sig: "+method.getSignature());
+            System.out.println("    base instance: "+GenMySignature(base, cur_clone_depth));
+            System.out.println("    result stored in: "+GenMySignature(resultVar, cur_clone_depth));
+            System.out.println("    isStatic: "+method.isStatic());
+        }
 
-        /**
-         * If this function belongs to a Var, then %this should be connected with this Var.
-         * (Important!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!)
-         * @// TODO: 2022/11/11  BUGGY FOR INTERFACE
-         */
-        Var this_ = method.getIR().getThis();
+        if(!method.isStatic()) {
+            /**
+             * If this function belongs to a Var, then %this should be connected with this Var.
+             * (Important!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!)
+             */
+            Var this_ = method.getIR().getThis();
 
-        String baseSig = GenMySignature(base, cur_clone_depth);
-        String thisSig = GenMySignature(this_, getNewInvokeCloneID(method));
+            String baseSig = GenMySignature(base, cur_clone_depth);
+            String thisSig = GenMySignature(this_, getNewInvokeCloneID(method));
 
-        AddEdge(
-                baseSig,
-                thisSig
-        );
+            AddEdge(
+                    baseSig,
+                    thisSig
+            );
 //                    AddEdge(
 //                            GenMySignature(this_, cur_clone_depth),
 //                            GenMySignature(base, cur_clone_depth)
 //                    );
-        for(JField field: getAllFields(new Var[]{base, this_}))
-        {
-            AddEdge(
-                    GenSynthesizedFieldSignature(baseSig, field),
-                    GenSynthesizedFieldSignature(thisSig, field)
-            );
-            AddEdge(
-                    GenSynthesizedFieldSignature(thisSig, field),
-                    GenSynthesizedFieldSignature(baseSig, field)
-            );
-            // Hopefully right!
+            for (JField field : getAllFields(new Var[]{base, this_})) {
+                AddEdge(
+                        GenSynthesizedFieldSignature(baseSig, field),
+                        GenSynthesizedFieldSignature(thisSig, field)
+                );
+                AddEdge(
+                        GenSynthesizedFieldSignature(thisSig, field),
+                        GenSynthesizedFieldSignature(baseSig, field)
+                );
+                // Hopefully right!
+            }
         }
         int arg_cnt = 0;
         for(Var arg : args){
@@ -597,7 +628,7 @@ public class Anderson {
 
         // receive the return value
         // invoke -> var = InvokeExp
-        if(resultVar.isPresent()){
+        if(resultVar!=null){
             int ret_num = method.getIR().getReturnVars().size();
             for(int i=0;i<ret_num;++i) {
                 /**
@@ -609,7 +640,7 @@ public class Anderson {
                  */
                 Var returnVar = method.getIR().getReturnVars().get(i); // Callee!
                 //Var resultVar = invoke_stmt.getResult(); // Caller!
-                String resultSig = GenMySignature(resultVar.get(), cur_clone_depth); // Caller!
+                String resultSig = GenMySignature(resultVar, cur_clone_depth); // Caller!
                 String returnSig = FetchReturnSignature(i, method); // Callee!
                 if(DEBUG) System.out.println("Returned Var: "+returnSig);
                 if(DEBUG) System.out.println("Result Var: "+resultSig);
@@ -618,7 +649,7 @@ public class Anderson {
                         resultSig
                 );
                 /* a.f = b.f for each f in b's fields. */
-                for(JField field: getAllFields(new Var[]{returnVar, resultVar.get()}))
+                for(JField field: getAllFields(new Var[]{returnVar, resultVar}))
                 {
                     AddEdge(
                             GenSynthesizedFieldSignature(returnSig, field),
